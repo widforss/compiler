@@ -13,6 +13,7 @@ const INPUT: &str = "-(2+3)**2*(3/5)-4";
 //const INPUT: &str = "2";
 //const INPUT: &str = "30000000000000000000000";
 //const INPUT: &str = "3+2a";
+//const INPUT: &str = "-(2+3e)";
 
 const UNARYS: [Funcmap; 1] = [Funcmap {
     keyword: "-",
@@ -113,12 +114,7 @@ fn main() {
 
 fn parse<'a>(input: Span) -> Result<Expr, Error> {
     match parse_expr(input) {
-        Ok((Span { fragment: "", .. }, tree)) => Ok(tree),
-        Ok((input, _)) => Err(Error {
-            input: input,
-            val: Some(input),
-            error: ErrorKind::NotRecognised,
-        }),
+        Ok((_, tree)) => Ok(tree),
         Err(Err::Incomplete(_)) => Err(Error {
             input: input,
             val: Some(input),
@@ -130,7 +126,20 @@ fn parse<'a>(input: Span) -> Result<Expr, Error> {
 }
 
 fn parse_expr<'a>(input: Span) -> IResult<Span, Expr> {
-    branch::alt((parse_infix, parse_expr_nobin))(input)
+    match branch::alt((parse_infix, parse_expr_nobin))(input) {
+        Ok((input, tree)) => {
+            if input.fragment == "" {
+                Ok((input, tree))
+            } else {
+                Err(Err::Failure(Error {
+                    input: input,
+                    val: Some(input),
+                    error: ErrorKind::NotRecognised,
+                }))
+            }
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn parse_expr_nobin<'a>(input: Span) -> IResult<Span, Expr> {
