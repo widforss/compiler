@@ -1,7 +1,13 @@
-use nom::{branch, bytes::complete::tag, character::complete::digit1, error, Err};
+use nom::{
+    branch,
+    bytes::complete::{is_not, tag},
+    character::complete::digit1,
+    error, sequence, Err,
+};
 use nom_locate::LocatedSpan;
 
-const INPUT: &str = "-2+3**2*3/5-4";
+const INPUT: &str = "-(2+3)**2*(3/5)-4";
+//const INPUT: &str = "-2+3**2*3/5-4";
 //const INPUT: &str = "2+-3";
 //const INPUT: &str = "2+30000000000000000000000";
 //const INPUT: &str = "2";
@@ -132,7 +138,14 @@ fn parse_expr_nobin<'a>(input: Span) -> IResult<Span, Expr> {
 }
 
 fn parse_expr_nobin_noun<'a>(input: Span) -> IResult<Span, Expr> {
-    parse_value(input)
+    branch::alt((parse_parens, parse_value))(input)
+}
+
+fn parse_parens(input: Span) -> IResult<Span, Expr> {
+    let parens = sequence::delimited(tag("("), is_not(")"), tag(")"));
+    let (input, content) = parens(input)?;
+    let (_, tree) = parse_expr(content)?;
+    Ok((input, tree))
 }
 
 fn parse_value(input: Span) -> IResult<Span, Expr> {
