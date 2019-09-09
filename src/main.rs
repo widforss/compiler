@@ -62,8 +62,7 @@ struct Expr<'a> {
 
 enum Value<'a> {
     Int(i32),
-    UnFunc(Function, Box<Expr<'a>>),
-    Func(Function, Box<Expr<'a>>, Box<Expr<'a>>),
+    Func(Function, Vec<Expr<'a>>),
 }
 
 #[derive(Clone, Copy)]
@@ -102,7 +101,7 @@ fn main() {
             error,
             ..
         }) => println!(
-            "{:#?} at line {}, column {}:\n\t{}",
+            "{} at line {}, column {}:\n\t{}",
             error.description(),
             val.line,
             val.get_utf8_column(),
@@ -189,13 +188,13 @@ fn parse_int(input: Span) -> IResult<Span, Expr> {
 }
 
 fn parse_unary(input: Span) -> IResult<Span, Expr> {
-    let (input, (span, func_map)) = tag_unary(input)?;
+    let (input, (span, func_map)) = tag_func(input, &UNARYS)?;
     let (input, right) = parse_expr_nobin(input)?;
     Ok((
         input,
         Expr {
             span,
-            val: Value::UnFunc(func_map.func, Box::new(right)),
+            val: Value::Func(func_map.func, vec![right]),
         },
     ))
 }
@@ -220,7 +219,7 @@ fn parse_infix_left<'a>(
     left: Expr<'a>,
 ) -> IResult<'a, Span<'a>, Expr<'a>> {
     // See if we can find an infix function. If not, return what we have.
-    let (input, (span, func_map)) = match tag_infix(input_bin) {
+    let (input, (span, func_map)) = match tag_func(input_bin, &INFIXS) {
         Ok(res) => res,
         Err(Err::Error(Error { input, .. })) => return Ok((input, left)),
         Err(err) => return Err(err),
@@ -241,17 +240,9 @@ fn parse_infix_left<'a>(
     // Put together the infix function with arguments. Continue forward.
     let expr = Expr {
         span,
-        val: Value::Func(func_map.func, Box::new(left), Box::new(right)),
+        val: Value::Func(func_map.func, vec![left, right]),
     };
     parse_infix_left(input, min_prec, expr)
-}
-
-fn tag_unary(input: Span) -> IResult<Span, SpanFuncmap> {
-    tag_func(input, &UNARYS)
-}
-
-fn tag_infix(input: Span) -> IResult<Span, SpanFuncmap> {
-    tag_func(input, &INFIXS)
 }
 
 fn tag_func<'a>(input: Span<'a>, funcs: &'a [Funcmap]) -> IResult<'a, Span<'a>, SpanFuncmap<'a>> {
@@ -272,12 +263,12 @@ fn tag_func<'a>(input: Span<'a>, funcs: &'a [Funcmap]) -> IResult<'a, Span<'a>, 
 #[derive(Debug)]
 enum SimpleExpr<'a> {
     Int(&'a i32),
-    UnSub(Box<SimpleExpr<'a>>),
-    Pow(Box<SimpleExpr<'a>>, Box<SimpleExpr<'a>>),
-    Mult(Box<SimpleExpr<'a>>, Box<SimpleExpr<'a>>),
-    Div(Box<SimpleExpr<'a>>, Box<SimpleExpr<'a>>),
-    Add(Box<SimpleExpr<'a>>, Box<SimpleExpr<'a>>),
-    Sub(Box<SimpleExpr<'a>>, Box<SimpleExpr<'a>>),
+    UnSub(Vec<SimpleExpr<'a>>),
+    Pow(Vec<SimpleExpr<'a>>),
+    Mult(Vec<SimpleExpr<'a>>),
+    Div(Vec<SimpleExpr<'a>>),
+    Add(Vec<SimpleExpr<'a>>),
+    Sub(Vec<SimpleExpr<'a>>),
 }
 
 impl<'a> SimpleExpr<'a> {
@@ -286,47 +277,44 @@ impl<'a> SimpleExpr<'a> {
             Expr {
                 val: Value::Int(int),
                 ..
-            } => SimpleExpr::Int(&int),
+            } => SimpleExpr::Int(int),
             Expr {
-                val: Value::UnFunc(Function::UnSub, x),
+                val: Value::Func(Function::UnSub, args),
                 ..
-            } => SimpleExpr::UnSub(Box::new(SimpleExpr::new(x))),
+            } => SimpleExpr::UnSub(SimpleExpr::vec(args)),
             Expr {
-                val: Value::Func(Function::Pow, x, y),
+                val: Value::Func(Function::Pow, args),
                 ..
-            } => SimpleExpr::Pow(Box::new(SimpleExpr::new(x)), Box::new(SimpleExpr::new(y))),
+            } => SimpleExpr::Pow(SimpleExpr::vec(args)),
             Expr {
-                val: Value::Func(Function::Mult, x, y),
+                val: Value::Func(Function::Mult, args),
                 ..
-            } => SimpleExpr::Mult(Box::new(SimpleExpr::new(x)), Box::new(SimpleExpr::new(y))),
+            } => SimpleExpr::Mult(SimpleExpr::vec(args)),
             Expr {
-                val: Value::Func(Function::Div, x, y),
+                val: Value::Func(Function::Div, args),
                 ..
-            } => SimpleExpr::Div(Box::new(SimpleExpr::new(x)), Box::new(SimpleExpr::new(y))),
+            } => SimpleExpr::Div(SimpleExpr::vec(args)),
             Expr {
-                val: Value::Func(Function::Add, x, y),
+                val: Value::Func(Function::Add, args),
                 ..
-            } => SimpleExpr::Add(Box::new(SimpleExpr::new(x)), Box::new(SimpleExpr::new(y))),
+            } => SimpleExpr::Add(SimpleExpr::vec(args)),
             Expr {
-                val: Value::Func(Function::Sub, x, y),
+                val: Value::Func(Function::Sub, args),
                 ..
-            } => SimpleExpr::Sub(Box::new(SimpleExpr::new(x)), Box::new(SimpleExpr::new(y))),
-            _ => panic!(),
-        }
-    }
-}
-
-impl<'a> error::ParseError<Span<'a>> for Error<'a> {
-    fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
-        Error {
-            input,
-            val: None,
-            error: ErrorKind::Nom(kind),
+            } => SimpleExpr::Sub(SimpleExpr::vec(args)),
         }
     }
 
-    fn append(_: Span<'a>, _: error::ErrorKind, other: Self) -> Self {
-        other
+    fn vec(vec: &'a Vec<Expr>) -> Vec<SimpleExpr<'a>> {
+        vec.into_iter()
+            .map(|expr| match expr {
+                Expr {
+                    val: Value::Int(int),
+                    ..
+                } => SimpleExpr::Int(int),
+                _ => SimpleExpr::new(expr),
+            })
+            .collect()
     }
 }
 
@@ -343,13 +331,30 @@ enum ErrorKind {
     Nom(error::ErrorKind),
 }
 
+const ERR_MSG_NOTRECOGNISED: &str = "Failed to parse input";
+const ERR_MSG_INCOMPLETE: &str = "There was not enough data";
+const ERR_MSG_PARSEINT: &str = "Could not parse Int";
 impl ErrorKind {
-    fn description(&self) -> String {
+    fn description(&self) -> &str {
         match self {
-            ErrorKind::NotRecognised => String::from("Failed to parse input."),
-            ErrorKind::Incomplete => String::from("There was not enough data."),
-            ErrorKind::ParseInt(err) => format!("Parse Int Error ({})", &err),
-            ErrorKind::Nom(err) => String::from(err.description()),
+            ErrorKind::NotRecognised => ERR_MSG_NOTRECOGNISED,
+            ErrorKind::Incomplete => ERR_MSG_INCOMPLETE,
+            ErrorKind::ParseInt(_) => ERR_MSG_PARSEINT,
+            ErrorKind::Nom(err) => err.description(),
         }
+    }
+}
+
+impl<'a> error::ParseError<Span<'a>> for Error<'a> {
+    fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
+        Error {
+            input,
+            val: None,
+            error: ErrorKind::Nom(kind),
+        }
+    }
+
+    fn append(_: Span<'a>, _: error::ErrorKind, other: Self) -> Self {
+        other
     }
 }
