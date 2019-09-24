@@ -1,0 +1,31 @@
+fn main() -> bool {
+    let mut n: i64 = 2;
+    let max_int: i64 = 2 ** 63 - 1;
+
+    while n < max_int {
+        if is_prime(n) {
+            print n;
+        }
+        n = n + 1;
+    }
+
+    return true;
+}
+
+fn is_prime(n: i64) -> bool {
+    let mut div: i64 = 2;
+    let mut squared: i64 = 4;
+    let mut sq_diff: i64 = 5;
+
+    while squared <= n {
+        if n % div == 0 {
+            return false;
+        }
+
+        div = div + 1;
+        squared = squared + sq_diff;
+        sq_diff = sq_diff + 2;
+    }
+    return true;
+}
+
