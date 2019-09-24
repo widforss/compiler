@@ -1,6 +1,7 @@
 mod parser;
+//mod interpreter;
 
-use parser::{Ast, Error};
+use parser::Ast;
 use std::env;
 use std::fs;
 
@@ -10,16 +11,24 @@ fn main() {
         Err(err) => {
             println!("{}", err);
             return;
-        },
+        }
     };
     let ast = Ast::parse(&input);
-    print_ast(ast);
+    print_ast(&ast);
+
+    let ast = match ast {
+        Ok(ast) => ast,
+        Err(_) => return,
+    };
+    //interpreter::run(ast);
 }
 
 fn file_content() -> Result<String, String> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
-        return Err(String::from("Exactly one argument expected (name of file to parse)!"));
+        return Err(String::from(
+            "Exactly one argument expected (name of file to parse)!",
+        ));
     }
     let filename = args.get(1).unwrap();
     match fs::read_to_string(filename) {
@@ -28,12 +37,12 @@ fn file_content() -> Result<String, String> {
     }
 }
 
-fn print_ast(ast: Result<Ast, Error>) {
+fn print_ast(ast: &Result<Ast, parser::Error>) {
     match ast {
         Ok(ast) => {
             print!("{}", ast);
         }
-        Err(Error {
+        Err(parser::Error {
             span: Some(span),
             error,
             ..
