@@ -2,7 +2,7 @@ use super::error::{Error, ErrorKind};
 use nom::{branch, bytes::complete::tag, character::complete as character, multi, sequence, Err};
 use nom_locate::LocatedSpan;
 
-const KEYWORDS: [&str; 9] = [
+const KEYWORDS: [&str; 11] = [
     "fn", "let", "mut", "while", "if", "else", "return", "print", "INFINITY", "true", "false",
 ];
 
