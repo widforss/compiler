@@ -3,7 +3,7 @@ use nom::{branch, bytes::complete::tag, character::complete as character, multi,
 use nom_locate::LocatedSpan;
 
 const KEYWORDS: [&str; 9] = [
-    "fn", "let", "mut", "while", "if", "else", "return", "print", "INFINITY",
+    "fn", "let", "mut", "while", "if", "else", "return", "print", "INFINITY", "true", "false",
 ];
 
 pub type Span<'a> = LocatedSpan<&'a str>;
