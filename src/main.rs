@@ -5,19 +5,27 @@ use std::env;
 use std::fs;
 
 fn main() {
-    let input = &file_content();
-    let ast = Ast::parse(input);
+    let input = match file_content() {
+        Ok(contents) => contents,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        },
+    };
+    let ast = Ast::parse(&input);
     print_ast(ast);
 }
 
-fn file_content() -> String {
+fn file_content() -> Result<String, String> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
-        panic!("Exactly one argument expected (name of file to parse)!");
+        return Err(String::from("Exactly one argument expected (name of file to parse)!"));
     }
     let filename = args.get(1).unwrap();
-    fs::read_to_string(filename)
-        .expect("Could not read input file!")
+    match fs::read_to_string(filename) {
+        Ok(string) => Ok(string),
+        Err(_) => Err(String::from("Could not read input file!")),
+    }
 }
 
 fn print_ast(ast: Result<Ast, Error>) {
