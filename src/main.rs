@@ -1,7 +1,6 @@
-mod parser;
-//mod interpreter;
+mod ast;
 
-use parser::Ast;
+use ast::{interpreter, parser, Ast, Expr, Span, Value};
 use std::env;
 use std::fs;
 
@@ -20,7 +19,13 @@ fn main() {
         Ok(ast) => ast,
         Err(_) => return,
     };
-    //interpreter::run(ast);
+
+    let main_call = Expr {
+        value: Value::Call(Span::new("main"), vec![]),
+        span: Span::new("main()"),
+    };
+    let result = ast.run(&main_call);
+    print_intprt(&result);
 }
 
 fn file_content() -> Result<String, String> {
@@ -46,17 +51,32 @@ fn print_ast(ast: &Result<Ast, parser::Error>) {
             span: Some(span),
             error,
             ..
-        }) => println!(
-            "{} near line {}, column {}:\n    {}",
-            error.description(),
-            span.line,
-            span.get_utf8_column(),
-            span.fragment
-                .split("\n")
-                .collect::<Vec<&str>>()
-                .get(0)
-                .unwrap(),
-        ),
+        }) => print_err(error.description(), *span),
         _ => panic!("Unhandled error!"),
     };
+}
+
+fn print_intprt(result: &Result<(), interpreter::Error>) {
+    match result {
+        Ok(_) => (),
+        Err(interpreter::Error {
+            span: Some(span),
+            error,
+        }) => print_err(error.description(), *span),
+        _ => panic!("Unhandled error!"),
+    }
+}
+
+fn print_err(desc: &str, span: Span) {
+    println!(
+        "{} near line {}, column {}:\n    {}",
+        desc,
+        span.line,
+        span.get_utf8_column(),
+        span.fragment
+            .split("\n")
+            .collect::<Vec<&str>>()
+            .get(0)
+            .unwrap(),
+    );
 }
