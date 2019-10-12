@@ -52,7 +52,7 @@ fn print_ast(ast: &Result<Ast, parser::Error>) {
             error,
             ..
         }) => print_err(error.description(), *span),
-        _ => panic!("Unhandled error!"),
+        Err(parser::Error { error, .. }) => println!("{}", error.description()),
     };
 }
 

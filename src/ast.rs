@@ -292,13 +292,21 @@ impl<'a> Value<'a> {
                  {}    {},\n\
                  {}    {},\n\
                  {}]",
-                op, instr, left.value.print(indent + 1), instr, right.value.print(indent + 1), instr
+                op,
+                instr,
+                left.value.print(indent + 1),
+                instr,
+                right.value.print(indent + 1),
+                instr
             ),
             UnOp(op, arg) => format!(
                 "UnOp({}) [\n\
                  {}    {},\n\
                  {}]",
-                op, instr, arg.value.print(indent + 1), instr
+                op,
+                instr,
+                arg.value.print(indent + 1),
+                instr
             ),
             Call(func, exprs) => {
                 let mut string = format!("Call({}) [\n", func.fragment);

@@ -16,11 +16,7 @@ impl<'a> Ast<'a> {
         match parse_fn(Span::new(input)) {
             Ok((Span { fragment: "", .. }, tree)) => Ok(tree),
             Ok((input, _)) => Err(Error::new(input, Some(input), ErrorKind::NotRecognised)),
-            Err(Err::Failure(Error {
-                input,
-                span: Some(span),
-                error,
-            })) => Err(Error::new(input, Some(span), error)),
+            Err(Err::Failure(Error { input, span, error })) => Err(Error::new(input, span, error)),
             _ => panic!(),
         }
     }
@@ -98,7 +94,7 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
         None => {
             return Err(Err::Failure(Error::new(
                 orig_input,
-                Some(orig_input),
+                None,
                 ErrorKind::NoMain,
             )))
         }
