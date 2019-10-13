@@ -1,9 +1,9 @@
-use super::super::Span;
+use super::{Span, Error};
 use nom::Err;
 
-pub type IResult<'a, I, O, E = Error<'a>> = Result<(I, O), Err<E>>;
+pub type IResult<'a, I, O, E = ParseError<'a>> = Result<(I, O), Err<E>>;
 
-pub struct Error<'a> {
+pub struct ParseError<'a> {
     pub input: Span<'a>,
     pub span: Option<Span<'a>>,
     pub error: ErrorKind,
@@ -23,45 +23,40 @@ pub enum ErrorKind {
     Nom(nom::error::ErrorKind),
 }
 
-impl<'a> Error<'a> {
+impl<'a> ParseError<'a> {
     pub fn new(input: Span<'a>, span: Option<Span<'a>>, error: ErrorKind) -> Self {
-        Error { input, span, error }
+        ParseError { input, span, error }
     }
 }
 
-const ERR_MSG_NOTRECOGNISED: &str = "Failed to parse input";
-const ERR_MSG_PARSEINT: &str = "Failed to parse integer";
-const ERR_MSG_PARSEFLOAT: &str = "Failed to parse float";
-const ERR_MSG_PARSETYPE: &str = "Failed to parse type";
-const ERR_MSG_PARSESTMT: &str = "Failed to parse statement";
-const ERR_MSG_PARSEFUNC: &str = "Failed to parse function";
-const ERR_MSG_DOUBLEFUNC: &str = "Function was declared twice";
-const ERR_MSG_KEYWORD: &str = "Did not expect keyword";
-const ERR_MSG_NOMAIN: &str = "main function not declared.";
-const ERR_MSG_MAINRETURNS: &str = "main returns non-unit type";
-impl ErrorKind {
-    pub fn description(&self) -> &str {
+impl<'a> Error for ParseError<'a> {
+    fn span(&self) -> Option<Span> {
+        self.span
+    }
+
+    fn description(&self) -> String {
         use ErrorKind::*;
 
-        match self {
-            NotRecognised => ERR_MSG_NOTRECOGNISED,
-            ParseInt => ERR_MSG_PARSEINT,
-            ParseFloat => ERR_MSG_PARSEFLOAT,
-            ParseType => ERR_MSG_PARSETYPE,
-            ParseStatement => ERR_MSG_PARSESTMT,
-            ParseFunction => ERR_MSG_PARSEFUNC,
-            DoubleFunctionDecl => ERR_MSG_DOUBLEFUNC,
-            Keyword => ERR_MSG_KEYWORD,
-            NoMain => ERR_MSG_NOMAIN,
-            MainReturns => ERR_MSG_MAINRETURNS,
-            Nom(err) => err.description(),
-        }
+        let string = match self.error {
+            NotRecognised => "Failed to parse input",
+            ParseInt => "Failed to parse integer",
+            ParseFloat => "Failed to parse float",
+            ParseType => "Failed to parse type",
+            ParseStatement => "Failed to parse statement",
+            ParseFunction => "Failed to parse function",
+            DoubleFunctionDecl => "Function was declared twice",
+            Keyword => "Did not expect keyword",
+            NoMain => "main function not declared.", 
+            MainReturns => "main returns non-unit type",
+            Nom(_) => panic!(),
+        };
+        String::from(string)
     }
 }
 
-impl<'a> nom::error::ParseError<Span<'a>> for Error<'a> {
+impl<'a> nom::error::ParseError<Span<'a>> for ParseError<'a> {
     fn from_error_kind(input: Span<'a>, kind: nom::error::ErrorKind) -> Self {
-        Error {
+        ParseError {
             input,
             span: None,
             error: ErrorKind::Nom(kind),

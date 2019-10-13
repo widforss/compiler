@@ -1,6 +1,4 @@
-use super::super::{Expr, Span, Statement, Stmt, Type};
-use super::error::{Error, ErrorKind, IResult};
-use super::util;
+use super::{Expr, Span, Statement, Stmt, Type, ParseError, ErrorKind, IResult, util};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
 };
@@ -34,12 +32,12 @@ fn parse_stmt(input: Span) -> IResult<Span, Vec<Stmt>> {
     );
     match util::short(parser(input)) {
         Ok(res) => Ok(res),
-        Err(Err::Failure(Error {
+        Err(Err::Failure(ParseError {
             input,
             error: ErrorKind::Nom(_),
             ..
         })) => {
-            return Err(Err::Failure(Error::new(
+            return Err(Err::Failure(ParseError::new(
                 input,
                 Some(input),
                 ErrorKind::ParseStatement,
@@ -275,7 +273,7 @@ fn parse_type(input: Span) -> IResult<Span, Type> {
         "i64" => Type::Int,
         "f64" => Type::Float,
         _ => {
-            return Err(Err::Error(Error::new(
+            return Err(Err::Error(ParseError::new(
                 orig_input,
                 Some(type_str),
                 ErrorKind::ParseType,

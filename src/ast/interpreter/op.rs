@@ -1,8 +1,4 @@
-use super::super::{Ast, BinOp, Expr, Literal, Span, UnOp};
-use super::error::{Error, ErrorKind};
-use super::state::State;
-use super::util;
-use super::LiteralSpan;
+use super::{util, IntprtError, ErrorKind, Ast, BinOp, Expr, Literal, Span, UnOp, State};
 
 use Literal::*;
 
@@ -11,9 +7,9 @@ pub fn intprt_binop<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
     span: Span<'a>,
-    ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<LiteralSpan<'a>, Error<'a>> {
+    ast: &'a Ast,
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     use BinOp::*;
 
     let literal = match call {
@@ -24,56 +20,55 @@ pub fn intprt_binop<'a>(
         Div => div(left, right, span, ast, state),
         Add => add(left, right, span, ast, state),
         Sub => sub(left, right, span, ast, state),
-        Lt => lt(left, right, span, ast, state),
-        Gt => gt(left, right, span, ast, state),
-        Leq => leq(left, right, span, ast, state),
-        Geq => geq(left, right, span, ast, state),
-        Eq => eq(left, right, span, ast, state),
-        Neq => neq(left, right, span, ast, state),
-        And => and(left, right, span, ast, state),
-        Or => or(left, right, span, ast, state),
+        Lt => lt(left, right, ast, state),
+        Gt => gt(left, right, ast, state),
+        Leq => leq(left, right, ast, state),
+        Geq => geq(left, right, ast, state),
+        Eq => eq(left, right, ast, state),
+        Neq => neq(left, right, ast, state),
+        And => and(left, right, ast, state),
+        Or => or(left, right, ast, state),
     };
-    Ok((literal?, span))
+    Ok(literal?)
 }
 
 pub fn intprt_unop<'a>(
     call: UnOp,
     arg: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<LiteralSpan<'a>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     use UnOp::*;
 
     let literal = match call {
         Sub => un_sub(arg, ast, state),
         Inv => un_inv(arg, ast, state),
     };
-    Ok((literal?, span))
+    Ok(literal?)
 }
 
 fn un_sub<'a>(
     arg: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let arg = util::intprt_expr(arg, ast, state)?;
     match arg {
-        (Int(val), _) => Ok(Int(-val)),
-        (Float(val), _) => Ok(Float(-val)),
-        (_, span) => throw_type(span),
+        Int(val) => Ok(Int(-val)),
+        Float(val) => Ok(Float(-val)),
+        _ => panic!(),
     }
 }
 
 fn un_inv<'a>(
     arg: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let arg = util::intprt_expr(arg, ast, state)?;
     match arg {
-        (Bool(val), _) => Ok(Bool(!val)),
-        (_, span) => throw_type(span),
+        Bool(val) => Ok(Bool(!val)),
+        _ => panic!(),
     }
 }
 
@@ -82,18 +77,18 @@ fn pow_<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             let val = check(pow_ii(left, right), span)?;
             Ok(Int(val))
-        }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left.powf(right))),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left.powf(right as f64))),
-        ((_, _), (_, _)) => throw_type(span),
+        },
+        (Float(left), Float(right)) => Ok(Float(left.powf(right))),
+        (Float(left), Int(right)) => Ok(Float(left.powf(right as f64))),
+        _ => panic!(),
     }
 }
 
@@ -102,23 +97,19 @@ fn mult<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             let val = check(left.checked_mul(right), span)?;
             Ok(Int(val))
-        }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left * right)),
-        ((Int(left), _), (Float(right), _)) => Ok(Float(left as f64 * right)),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left * right as f64)),
-        ((_, span), (Int(_), _)) => throw_type(span),
-        ((Int(_), _), (_, span)) => throw_type(span),
-        ((_, span), (Float(_), _)) => throw_type(span),
-        ((Float(_), _), (_, span)) => throw_type(span),
-        ((_, _), (_, _)) => throw_type(span),
+        },
+        (Float(left), Float(right)) => Ok(Float(left * right)),
+        (Int(left), Float(right)) => Ok(Float(left as f64 * right)),
+        (Float(left), Int(right)) => Ok(Float(left * right as f64)),
+        _ => panic!(),
     }
 }
 
@@ -127,24 +118,20 @@ fn rem<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             check_zero(Int(right), span)?;
             let val = check(left.checked_rem(right), span)?;
             Ok(Int(val))
-        }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left % right)),
-        ((Int(left), _), (Float(right), _)) => Ok(Float(left as f64 % right)),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left % right as f64)),
-        ((_, span), (Int(_), _)) => throw_type(span),
-        ((Int(_), _), (_, span)) => throw_type(span),
-        ((_, span), (Float(_), _)) => throw_type(span),
-        ((Float(_), _), (_, span)) => throw_type(span),
-        ((_, _), (_, _)) => throw_type(span),
+        },
+        (Float(left), Float(right)) => Ok(Float(left % right)),
+        (Int(left), Float(right)) => Ok(Float(left as f64 % right)),
+        (Float(left), Int(right)) => Ok(Float(left % right as f64)),
+        _ => panic!(),
     }
 }
 
@@ -153,8 +140,8 @@ fn int_div<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     match div(left, right, span, ast, state)? {
         Int(val) => Ok(Int(val)),
         Float(val) => Ok(Float(val.floor())),
@@ -167,24 +154,20 @@ fn div<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             check_zero(Int(right), span)?;
             let val = check(left.checked_div(right), span)?;
             Ok(Int(val))
         }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left / right)),
-        ((Int(left), _), (Float(right), _)) => Ok(Float(left as f64 / right)),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left / right as f64)),
-        ((_, span), (Int(_), _)) => throw_type(span),
-        ((Int(_), _), (_, span)) => throw_type(span),
-        ((_, span), (Float(_), _)) => throw_type(span),
-        ((Float(_), _), (_, span)) => throw_type(span),
-        ((_, _), (_, _)) => throw_type(span),
+        (Float(left), Float(right)) => Ok(Float(left / right)),
+        (Int(left), Float(right)) => Ok(Float(left as f64 / right)),
+        (Float(left), Int(right)) => Ok(Float(left / right as f64)),
+        _ => panic!(),
     }
 }
 
@@ -193,23 +176,19 @@ fn add<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             let val = check(left.checked_add(right), span)?;
             Ok(Int(val))
         }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left + right)),
-        ((Int(left), _), (Float(right), _)) => Ok(Float(left as f64 + right)),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left + right as f64)),
-        ((_, span), (Int(_), _)) => throw_type(span),
-        ((Int(_), _), (_, span)) => throw_type(span),
-        ((_, span), (Float(_), _)) => throw_type(span),
-        ((Float(_), _), (_, span)) => throw_type(span),
-        ((_, _), (_, _)) => throw_type(span),
+        (Float(left), Float(right)) => Ok(Float(left + right)),
+        (Int(left), Float(right)) => Ok(Float(left as f64 + right)),
+        (Float(left), Int(right)) => Ok(Float(left + right as f64)),
+        _ => panic!(),
     }
 }
 
@@ -218,171 +197,148 @@ fn sub<'a>(
     right: &'a Expr<'a>,
     span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => {
+        (Int(left), Int(right)) => {
             let val = check(left.checked_sub(right), span)?;
             Ok(Int(val))
         }
-        ((Float(left), _), (Float(right), _)) => Ok(Float(left - right)),
-        ((Int(left), _), (Float(right), _)) => Ok(Float(left as f64 - right)),
-        ((Float(left), _), (Int(right), _)) => Ok(Float(left - right as f64)),
-        ((_, span), (Int(_), _)) => throw_type(span),
-        ((Int(_), _), (_, span)) => throw_type(span),
-        ((_, span), (Float(_), _)) => throw_type(span),
-        ((Float(_), _), (_, span)) => throw_type(span),
-        ((_, _), (_, _)) => throw_type(span),
+        (Float(left), Float(right)) => Ok(Float(left - right)),
+        (Int(left), Float(right)) => Ok(Float(left as f64 - right)),
+        (Float(left), Int(right)) => Ok(Float(left - right as f64)),
+        _ => panic!(),
     }
 }
 
 fn lt<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left < right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left < right)),
-        ((_, _), (_, _)) => throw_type(span),
+        (Int(left), Int(right)) => Ok(Bool(left < right)),
+        (Float(left), Float(right)) => Ok(Bool(left < right)),
+        _ => panic!(),
     }
 }
 
 fn gt<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left > right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left > right)),
-        ((_, _), (_, _)) => throw_type(span),
+        (Int(left), Int(right)) => Ok(Bool(left > right)),
+        (Float(left), Float(right)) => Ok(Bool(left > right)),
+        _ => panic!(),
     }
 }
 
 fn leq<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
-    let left = util::intprt_expr(left, ast, state)?;
-    let right = util::intprt_expr(right, ast, state)?;
-    match (left, right) {
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left <= right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left <= right)),
-        ((_, _), (_, _)) => throw_type(span),
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
+    if let Bool(val) = gt(left, right, ast, state)? {
+        Ok(Bool(!val))
+    } else {
+        panic!();
     }
 }
 
 fn geq<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
-    let left = util::intprt_expr(left, ast, state)?;
-    let right = util::intprt_expr(right, ast, state)?;
-    match (left, right) {
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left >= right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left >= right)),
-        ((_, _), (_, _)) => throw_type(span),
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
+    if let Bool(val) = lt(left, right, ast, state)? {
+        Ok(Bool(!val))
+    } else {
+        panic!();
     }
 }
 
 fn eq<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let left = util::intprt_expr(left, ast, state)?;
     let right = util::intprt_expr(right, ast, state)?;
     match (left, right) {
-        ((Bool(left), _), (Bool(right), _)) => Ok(Bool(left == right)),
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left == right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left == right)),
-        ((_, _), (_, _)) => throw_type(span),
+        (Bool(left), Bool(right)) => Ok(Bool(left == right)),
+        (Int(left), Int(right)) => Ok(Bool(left == right)),
+        (Float(left), Float(right)) => Ok(Bool(left == right)),
+        _ => panic!(),
     }
 }
 
 fn neq<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
-    let left = util::intprt_expr(left, ast, state)?;
-    let right = util::intprt_expr(right, ast, state)?;
-    match (left, right) {
-        ((Bool(left), _), (Bool(right), _)) => Ok(Bool(left != right)),
-        ((Int(left), _), (Int(right), _)) => Ok(Bool(left != right)),
-        ((Float(left), _), (Float(right), _)) => Ok(Bool(left != right)),
-        ((_, _), (_, _)) => throw_type(span),
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
+    if let Bool(val) = eq(left, right, ast, state)? {
+        Ok(Bool(!val))
+    } else {
+        panic!();
     }
 }
 
 fn and<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     match util::intprt_expr(left, ast, state)? {
-        (Bool(false), _) => Ok(Bool(false)),
-        (Bool(true), _) => {
-            if let (Bool(bool), _) = util::intprt_expr(right, ast, state)? {
+        Bool(false) => Ok(Bool(false)),
+        Bool(true) => {
+            if let Bool(bool) = util::intprt_expr(right, ast, state)? {
                 Ok(Bool(bool))
             } else {
-                throw_type(span)
+                panic!();
             }
         }
-        (_, _) => throw_type(span),
+        _ => panic!(),
     }
 }
 
 fn or<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Literal, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     match util::intprt_expr(left, ast, state)? {
-        (Bool(true), _) => Ok(Bool(true)),
-        (Bool(false), _) => {
-            if let (Bool(bool), _) = util::intprt_expr(right, ast, state)? {
+        Bool(true) => Ok(Bool(true)),
+        Bool(false) => {
+            if let Bool(bool) = util::intprt_expr(right, ast, state)? {
                 Ok(Bool(bool))
             } else {
-                throw_type(span)
+                panic!();
             }
         }
-        (_, _) => throw_type(span),
+        _ => panic!(),
     }
 }
 
-fn throw_type(span: Span) -> Result<Literal, Error> {
-    Err(Error::new(Some(span), ErrorKind::TypeError))
-}
-
-fn check_zero<'a>(val: Literal, span: Span<'a>) -> Result<Literal, Error<'a>> {
+fn check_zero<'a>(val: Literal, span: Span<'a>) -> Result<Literal, IntprtError<'a>> {
     match val {
-        Int(0) => Err(Error::new(Some(span), ErrorKind::DivisionByZero)),
+        Int(0) => Err(IntprtError::new(Some(span), ErrorKind::DivisionByZero)),
         Int(_) => Ok(val),
         _ => panic!(),
     }
@@ -409,9 +365,9 @@ fn pow_ii(mut base: i64, mut exp: i64) -> Option<i64> {
     Some(acc)
 }
 
-fn check<'a, T>(val: Option<T>, span: Span<'a>) -> Result<T, Error> {
+fn check<'a, T>(val: Option<T>, span: Span<'a>) -> Result<T, IntprtError> {
     match val {
         Some(val) => Ok(val),
-        None => Err(Error::new(Some(span), ErrorKind::Overflow)),
+        None => Err(IntprtError::new(Some(span), ErrorKind::Overflow)),
     }
 }

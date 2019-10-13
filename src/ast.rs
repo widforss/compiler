@@ -1,6 +1,11 @@
 pub mod interpreter;
-pub mod parser;
+pub mod typechecker;
+mod parser;
+mod error;
+mod state;
 
+pub use error::Error;
+use state::State;
 use nom_locate::LocatedSpan;
 use std::collections::HashMap;
 use std::fmt;
@@ -14,6 +19,7 @@ pub struct Func<'a> {
     params: Vec<(Type, Mutability, Span<'a>)>,
     body: Stmt<'a>,
     span: Span<'a>,
+    order: u64,
 }
 
 pub type Mutability = bool;
@@ -90,6 +96,8 @@ pub enum UnOp {
 impl<'a> fmt::Display for Ast<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Ast(functions) = self;
+        let mut functions = functions.iter().collect::<Vec<(&&str, &Func)>>();
+        functions.sort_by(|(_, a), (_, b)| a.order.cmp(&b.order));
         for (name, function) in functions.iter() {
             write!(f, "\"{}\": {}\n", name, function)?;
         }
@@ -313,7 +321,7 @@ impl<'a> Value<'a> {
                 for expr in exprs.iter() {
                     string = format!("{}{}    {},\n", string, instr, expr.value.print(indent + 1));
                 }
-                format!("{}{}]", string, instr)
+                format!("{}{}],", string, instr)
             }
             Ident(span) => format!("Ident(\"{}\")", span.fragment),
         }

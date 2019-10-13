@@ -1,76 +1,55 @@
 mod error;
 mod op;
-mod state;
 mod util;
 
-use super::{Ast, Expr, Literal, Mutability, Span, Statement, Stmt, Type};
-pub use error::Error;
-use error::ErrorKind;
-use state::{State, Variable};
+use super::{Ast, Expr, Literal, Span, Statement, Stmt, Value, BinOp, UnOp, State, Error};
+use error::{IntprtError, ErrorKind};
 
-pub type LiteralSpan<'a> = (Literal, Span<'a>);
+const STACK_DEPTH: u64 = 1000;
 
 impl<'a> Ast<'a> {
-    pub fn run(&'a self, main_call: &'a Expr<'a>) -> Result<(), Error<'a>> {
-        match util::intprt_expr(main_call, self, &mut State::new()) {
-            Ok((_, _)) => Ok(()),
+    pub fn run(&'a self, main_call: &'a Expr<'a>) -> Result<(), IntprtError<'a>> {
+        match util::intprt_expr(main_call, self, &mut State::new(1)) {
+            Ok(_) => Ok(()),
             Err(err) => Err(err),
         }
     }
 }
 
-pub fn intprt_call<'a>(
+fn intprt_call<'a>(
     ident: &Span,
     args: &'a Vec<Expr<'a>>,
-    span: Span<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<LiteralSpan<'a>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Literal, IntprtError<'a>> {
     let Ast(map) = ast;
-    let func = match map.get(&ident.fragment[..]) {
-        Some(func) => func,
-        _ => return Err(Error::new(Some(span), ErrorKind::FuncNotFound)),
-    };
+    let func = map.get(&ident.fragment[..]).unwrap();
 
-    if func.params.len() != args.len() {
-        return Err(Error::new(Some(span), ErrorKind::ArgsNum));
-    };
+    if state.depth() > STACK_DEPTH {
+        return Err(IntprtError::new(Some(func.span), ErrorKind::StackDepth));
+    }
 
     let args = intprt_args(&args, ast, state)?;
-    let state = &mut State::new();
+    let state = &mut State::new(state.depth() + 1);
     let mut param_iter = func.params.iter();
-    for (value, argspan) in args.iter() {
-        let (typ, mutable, ident) = *param_iter.next().unwrap();
-        let value = util::check_type(typ, *value, *argspan)?;
-        let var = Variable {
-            typ,
-            mutable,
-            value,
-        };
-        state.insert(ident, var);
+    for value in args.iter() {
+        let (_, _, ident) = *param_iter.next().unwrap();
+        state.insert(ident, *value);
     }
 
-    if let Some((literal, span)) = intprt_stmt(&func.body, ast, state)? {
-        match util::check_type(func.typ, literal, span) {
-            Ok(res) => Ok((res, span)),
-            Err(_) => Err(Error::new(Some(span), ErrorKind::ReturnType)),
-        }
-    } else {
-        return Err(Error::new(Some(func.span), ErrorKind::ReturnType));
-    }
+    let return_val = intprt_stmt(&func.body, ast, state)?;
+    Ok(return_val.unwrap())
 }
 
 fn intprt_stmt<'a>(
     stmt: &'a Stmt<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
     use Statement::*;
 
     match &stmt.stmt {
-        Let(mutability, ident, typ, expr) => {
-            intprt_let(*mutability, *ident, *typ, &expr, ast, state)
-        }
+        Let(_, ident, _, expr) => intprt_let(*ident, &expr, ast, state),
         Assign(ident, expr) => intprt_assign(*ident, &expr, ast, state),
         While(cond, body) => intprt_while(&cond, &**body, ast, state),
         IfElse(cond, body, els) => intprt_ifelse(&cond, &**body, &**els, ast, state),
@@ -81,21 +60,13 @@ fn intprt_stmt<'a>(
 }
 
 fn intprt_let<'a>(
-    mutable: Mutability,
     ident: Span<'a>,
-    typ: Type,
     expr: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
-    let (value, _) = util::intprt_expr(expr, ast, state)?;
-    let value = util::check_type(typ, value, expr.span)?;
-    let var = Variable {
-        typ,
-        mutable,
-        value,
-    };
-    state.insert(ident, var);
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
+    let value = util::intprt_expr(expr, ast, state)?;
+    state.insert(ident, value);
     Ok(None)
 }
 
@@ -103,10 +74,10 @@ fn intprt_assign<'a>(
     ident: Span<'a>,
     expr: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
-    let (val, _) = util::intprt_expr(expr, ast, state)?;
-    state.set(ident, val)?;
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
+    let value = util::intprt_expr(expr, ast, state)?;
+    state.set(ident, value);
     Ok(None)
 }
 
@@ -114,16 +85,15 @@ fn intprt_while<'a>(
     cond: &'a Expr<'a>,
     body: &'a Stmt<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
     loop {
-        let (val, _) = util::intprt_expr(cond, ast, state)?;
-        let cond = util::check_type(Type::Bool, val, cond.span)?;
+        let cond = util::intprt_expr(cond, ast, state)?;
         if let Literal::Bool(false) = cond {
             return Ok(None);
         }
         match intprt_stmt(body, ast, state)? {
-            Some((result, span)) => return Ok(Some((result, span))),
+            Some(result) => return Ok(Some(result)),
             None => continue,
         };
     }
@@ -134,10 +104,9 @@ fn intprt_ifelse<'a>(
     body: &'a Stmt<'a>,
     els: &'a Stmt<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
-    let (val, _) = util::intprt_expr(cond, ast, state)?;
-    let cond = util::check_type(Type::Bool, val, cond.span)?;
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
+    let cond = util::intprt_expr(cond, ast, state)?;
     if let Literal::Bool(true) = cond {
         intprt_stmt(body, ast, state)
     } else {
@@ -148,8 +117,8 @@ fn intprt_ifelse<'a>(
 fn intprt_block<'a>(
     block: &'a Vec<Stmt<'a>>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
     let mut return_val = None;
 
     state.inc();
@@ -166,24 +135,24 @@ fn intprt_block<'a>(
 fn intprt_return<'a>(
     expr: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
-    let (lit, span) = util::intprt_expr(expr, ast, state)?;
-    Ok(Some((lit, span)))
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
+    let value = util::intprt_expr(expr, ast, state)?;
+    Ok(Some(value))
 }
 
 fn intprt_print<'a>(
     expr: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Option<LiteralSpan<'a>>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Option<Literal>, IntprtError<'a>> {
     use Literal::*;
 
     let string = match util::intprt_expr(expr, ast, state)? {
-        (Unit, _) => format!("()"),
-        (Bool(val), _) => format!("{}", val),
-        (Int(val), _) => format!("{}", val),
-        (Float(val), _) => format!("{}", val),
+        Unit => format!("()"),
+        Bool(val) => format!("{}", val),
+        Int(val) => format!("{}", val),
+        Float(val) => format!("{}", val),
     };
     println!("{}", string);
     Ok(None)
@@ -192,8 +161,8 @@ fn intprt_print<'a>(
 fn intprt_args<'a>(
     args: &'a Vec<Expr<'a>>,
     ast: &'a Ast<'a>,
-    state: &mut State,
-) -> Result<Vec<LiteralSpan<'a>>, Error<'a>> {
+    state: &mut State<Literal>,
+) -> Result<Vec<Literal>, IntprtError<'a>> {
     let mut interpreted_args = vec![];
     for arg in args.iter() {
         let literal = util::intprt_expr(arg, ast, state)?;

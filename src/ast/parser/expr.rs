@@ -1,6 +1,4 @@
-use super::super::{BinOp, Expr, Literal, Span, UnOp, Value};
-use super::error::{Error, ErrorKind, IResult};
-use super::util;
+use super::{BinOp, Expr, Literal, Span, UnOp, Value, ParseError, ErrorKind, IResult, util};
 use nom::{branch, bytes::complete::tag, character::complete as character, multi, sequence, Err};
 use std::f64;
 
@@ -156,13 +154,13 @@ fn parse_parens(input: Span) -> IResult<Span, Expr> {
     let parser = sequence::delimited(tag("("), Expr::parse, tag(")"));
     match parser(input) {
         Ok(res) => Ok(res),
-        Err(Err::Failure(Error { error, .. })) => Err(Err::Failure(Error::new(
+        Err(Err::Failure(ParseError { error, .. })) => Err(Err::Failure(ParseError::new(
             orig_input,
             Some(orig_input),
             error,
         ))),
-        Err(Err::Error(Error { error, .. })) => {
-            Err(Err::Error(Error::new(orig_input, Some(orig_input), error)))
+        Err(Err::Error(ParseError { error, .. })) => {
+            Err(Err::Error(ParseError::new(orig_input, Some(orig_input), error)))
         }
         Err(_) => panic!(),
     }
@@ -265,7 +263,7 @@ fn parse_number_special(input: Span) -> IResult<Span, Expr> {
     let mut span = input;
 
     let infty_parser = sequence::tuple((
-        branch::alt((tag::<&str, Span, Error>("-"), tag(""))),
+        branch::alt((tag::<&str, Span, ParseError>("-"), tag(""))),
         sequence::preceded(
             character::multispace0,
             branch::alt((tag("INFINITY"), tag("NAN"))),
@@ -289,7 +287,7 @@ fn parse_number_special(input: Span) -> IResult<Span, Expr> {
             },
         ))
     } else {
-        Err(Err::Error(Error::new(
+        Err(Err::Error(ParseError::new(
             input,
             Some(span),
             ErrorKind::ParseFloat,
@@ -321,7 +319,7 @@ fn parse_number_normal(input: Span) -> IResult<Span, Expr> {
                     value: Value::Literal(Literal::Float(float)),
                 },
             )),
-            Err(_) => Err(Err::Failure(Error::new(
+            Err(_) => Err(Err::Failure(ParseError::new(
                 input,
                 Some(span),
                 ErrorKind::ParseFloat,
@@ -336,7 +334,7 @@ fn parse_number_normal(input: Span) -> IResult<Span, Expr> {
                     value: Value::Literal(Literal::Int(int)),
                 },
             )),
-            Err(_) => Err(Err::Failure(Error::new(
+            Err(_) => Err(Err::Failure(ParseError::new(
                 input,
                 Some(span),
                 ErrorKind::ParseInt,
@@ -366,9 +364,10 @@ fn parse_infix(input: Span) -> IResult<Span, Expr> {
     // Initialize with minimum precedence 1.
     match parse_infix_un(input, 1) {
         Ok(res) => Ok(res),
-        Err(Err::Error(Error { span, error, .. })) => Err(Err::Error(Error { input, span, error })),
-        Err(Err::Failure(Error { span, error, .. })) => {
-            Err(Err::Failure(Error { input, span, error }))
+        Err(Err::Error(ParseError { span, error, .. })) =>
+            Err(Err::Error(ParseError { input, span, error })),
+        Err(Err::Failure(ParseError { span, error, .. })) => {
+            Err(Err::Failure(ParseError { input, span, error }))
         }
         _ => panic!(),
     }
@@ -397,7 +396,7 @@ fn parse_infix_left<'a>(
 
     let (input, op_map) = match tag_infix(input_bin) {
         Ok(res) => res,
-        Err(Err::Error(Error { input, .. })) => return Ok((input, left)),
+        Err(Err::Error(ParseError { input, .. })) => return Ok((input, left)),
         Err(err) => return Err(err),
     };
 
@@ -437,7 +436,7 @@ fn tag_unary<'a>(input: Span<'a>) -> IResult<'a, Span<'a>, &'a UnOpmap> {
             Err(err) => return Err(err),
         }
     }
-    Err(Err::Error(Error::new(
+    Err(Err::Error(ParseError::new(
         input,
         None,
         ErrorKind::Nom(nom::error::ErrorKind::Tag),
@@ -452,7 +451,7 @@ fn tag_infix<'a>(input: Span<'a>) -> IResult<'a, Span<'a>, &'a BinOpmap> {
             Err(err) => return Err(err),
         }
     }
-    Err(Err::Error(Error::new(
+    Err(Err::Error(ParseError::new(
         input,
         None,
         ErrorKind::Nom(nom::error::ErrorKind::Tag),

@@ -1,6 +1,7 @@
 mod ast;
 
-use ast::{interpreter, parser, Ast, Expr, Span, Value};
+use ast::{Ast, Expr, Span, Value, Error};
+use nom::character::complete as character;
 use std::env;
 use std::fs;
 
@@ -12,20 +13,38 @@ fn main() {
             return;
         }
     };
-    let ast = Ast::parse(&input);
-    print_ast(&ast);
 
+    let ast = Ast::parse(&input);
     let ast = match ast {
-        Ok(ast) => ast,
-        Err(_) => return,
+        Ok(ast) => {
+            print!("{}", ast);
+            ast
+        },
+        Err(error) => {
+            print_err(&input, error);
+            return
+        },
+    };
+
+    match ast.typecheck() {
+        Ok(_) => (),
+        Err(error) => {
+            print_err(&input, error);
+            return;
+        },
     };
 
     let main_call = Expr {
         value: Value::Call(Span::new("main"), vec![]),
         span: Span::new("main()"),
     };
-    let result = ast.run(&main_call);
-    print_intprt(&result);
+    match ast.run(&main_call) {
+        Ok(_) => (),
+        Err(error) => {
+            print_err(&input, error);
+            return;
+        },
+    };
 }
 
 fn file_content() -> Result<String, String> {
@@ -42,41 +61,44 @@ fn file_content() -> Result<String, String> {
     }
 }
 
-fn print_ast(ast: &Result<Ast, parser::Error>) {
-    match ast {
-        Ok(ast) => {
-            print!("{}", ast);
-        }
-        Err(parser::Error {
-            span: Some(span),
-            error,
-            ..
-        }) => print_err(error.description(), *span),
-        Err(parser::Error { error, .. }) => println!("{}", error.description()),
-    };
-}
-
-fn print_intprt(result: &Result<(), interpreter::Error>) {
-    match result {
-        Ok(_) => (),
-        Err(interpreter::Error {
-            span: Some(span),
-            error,
-        }) => print_err(error.description(), *span),
-        _ => panic!("Unhandled error!"),
+fn print_err<E: Error>(input: &String, error: E) {
+    if let Some(span) = error.span() {
+        eprintln!(
+            "ERROR: {} near line {}, column {}:\n{}",
+            error.description(),
+            span.line,
+            span.get_utf8_column(),
+            fmt_context(input, span),
+        );
+    } else {
+        eprintln!("ERROR: {}", error.description());
     }
 }
 
-fn print_err(desc: &str, span: Span) {
-    println!(
-        "{} near line {}, column {}:\n    {}",
-        desc,
-        span.line,
-        span.get_utf8_column(),
-        span.fragment
-            .split("\n")
-            .collect::<Vec<&str>>()
-            .get(0)
-            .unwrap(),
+fn fmt_context(input: &String, span: Span) -> String {
+    let mut offset = span.offset;
+    while let Some(char) = input.as_bytes().get(offset - 1 .. offset) {
+        if char[0] == b'\n' {
+            break;
+        }
+        offset -= 1;
+    }
+
+    let mut end_offset = span.offset;
+    while let Some(char) = input.as_bytes().get(end_offset .. end_offset + 1) {
+        if char[0] == b'\n' {
+            break;
+        }
+        end_offset += 1;
+    }
+
+    let context = input.get(offset .. end_offset).unwrap();
+    let (context, spaces) =
+        character::multispace0::<&str, (&str, nom::error::ErrorKind)>(context).unwrap(); 
+    let marker = format!(
+        "{}{}",
+        " ".repeat(span.offset - (offset + spaces.len())),
+        "^".repeat(span.fragment.len()),
     );
+    format!("    {}\n    {}", context, marker)
 }

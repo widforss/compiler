@@ -3,20 +3,19 @@ mod expr;
 mod stmt;
 mod util;
 
-use super::{Ast, Func, Mutability, Span, Stmt, Type};
-pub use error::Error;
-use error::{ErrorKind, IResult};
+use super::{Ast, Func, Mutability, Span, Stmt, Type, BinOp, Expr, Literal, UnOp, Value, Statement, error::Error};
+use error::{ErrorKind, IResult, ParseError};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
 };
 use std::collections::HashMap;
 
 impl<'a> Ast<'a> {
-    pub fn parse(input: &'a str) -> Result<Self, Error> {
+    pub fn parse(input: &'a str) -> Result<Self, ParseError> {
         match parse_fn(Span::new(input)) {
             Ok((Span { fragment: "", .. }, tree)) => Ok(tree),
-            Ok((input, _)) => Err(Error::new(input, Some(input), ErrorKind::NotRecognised)),
-            Err(Err::Failure(Error { input, span, error })) => Err(Error::new(input, span, error)),
+            Ok((input, _)) => Err(ParseError::new(input, Some(input), ErrorKind::NotRecognised)),
+            Err(Err::Failure(ParseError { input, span, error })) => Err(ParseError::new(input, span, error)),
             _ => panic!(),
         }
     }
@@ -45,12 +44,12 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
     )));
     let (input, mut functions) = match util::short(parser(input)) {
         Ok(res) => res,
-        Err(Err::Failure(Error {
+        Err(Err::Failure(ParseError {
             input,
             error: ErrorKind::Nom(_),
             ..
         })) => {
-            return Err(Err::Failure(Error::new(
+            return Err(Err::Failure(ParseError::new(
                 input,
                 Some(input),
                 ErrorKind::ParseFunction,
@@ -61,38 +60,37 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
 
     let mut funcmap = HashMap::new();
     functions.reverse();
-    loop {
-        if let Some((mut span, ident, params, typ, body, end)) = functions.pop() {
-            let begin = span.offset - orig_input.offset;
-            let end = end.offset - orig_input.offset;
-            span.fragment = &orig_input.fragment[begin..end];
+    let mut order = 0;
+    while let Some((mut span, ident, params, typ, body, end)) = functions.pop() {
+        let begin = span.offset - orig_input.offset;
+        let end = end.offset - orig_input.offset;
+        span.fragment = &orig_input.fragment[begin..end];
 
-            if !funcmap.contains_key(ident.fragment) {
-                funcmap.insert(
-                    ident.fragment,
-                    Func {
-                        typ,
-                        params,
-                        body,
-                        span,
-                    },
-                );
-            } else {
-                return Err(Err::Failure(Error::new(
-                    orig_input,
-                    Some(span),
-                    ErrorKind::DoubleFunctionDecl,
-                )));
-            }
+        if !funcmap.contains_key(ident.fragment) {
+            funcmap.insert(
+                ident.fragment,
+                Func {
+                    typ,
+                    params,
+                    body,
+                    span,
+                    order,
+                },
+            );
         } else {
-            break;
+            return Err(Err::Failure(ParseError::new(
+                orig_input,
+                Some(span),
+                ErrorKind::DoubleFunctionDecl,
+            )));
         }
+        order += 1;
     }
 
     let mainfunc = match funcmap.get("main") {
         Some(res) => res,
         None => {
-            return Err(Err::Failure(Error::new(
+            return Err(Err::Failure(ParseError::new(
                 orig_input,
                 None,
                 ErrorKind::NoMain,
@@ -101,7 +99,7 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
     };
     match mainfunc.typ {
         Type::Unit => Ok((input, Ast(funcmap))),
-        _ => Err(Err::Failure(Error::new(
+        _ => Err(Err::Failure(ParseError::new(
             orig_input,
             Some(mainfunc.span),
             ErrorKind::MainReturns,

@@ -1,5 +1,4 @@
-use super::error::{Error, ErrorKind, IResult};
-use super::Span;
+use super::{ParseError, ErrorKind, IResult, Span};
 use nom::{branch, bytes::complete::tag, character::complete as character, multi, sequence, Err};
 
 const KEYWORDS: [&str; 12] = [
@@ -43,7 +42,7 @@ pub fn parse_ident_span(input: Span) -> IResult<Span, Span> {
 
     for keyword in KEYWORDS.iter() {
         if span.fragment == *keyword {
-            return Err(Err::Error(Error::new(
+            return Err(Err::Error(ParseError::new(
                 orig_input,
                 Some(span),
                 ErrorKind::Keyword,
