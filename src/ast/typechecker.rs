@@ -55,7 +55,7 @@ fn check_stmt<'a>(
         IfElse(cond, body, els) => check_ifelse(&cond, &**body, &**els, typ, ast, typestate),
         Block(vector) => check_block(vector, typ, ast, typestate),
         Return(expr) => check_return(&expr, typ, ast, typestate),
-        Print(_) => Ok(None),
+        Print(expr) => check_print(&expr, ast, typestate),
     }
 }
 
@@ -172,4 +172,13 @@ fn check_return<'a>(
     let expr_type = util::check_expr(expr, ast, typestate)?;
     util::check_type(expr_type, typ, expr.span)?;
     Ok(Some(expr_type))
+}
+
+fn check_print<'a>(
+    expr: &'a Expr<'a>,
+    ast: &'a Ast<'a>,
+    typestate: &mut State<TypeVariable>,
+) -> Result<Option<Type>, TypeError<'a>> {
+    util::check_expr(expr, ast, typestate)?;
+    Ok(None)
 }

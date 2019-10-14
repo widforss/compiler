@@ -15,16 +15,14 @@ fn main() -> () {
 fn is_prime(n: i64) -> bool {
     let mut div: i64 = 2;
     let mut squared: i64 = 4;
-    let mut sq_diff: i64 = 5;
 
     while squared <= n {
         if n % div == 0 {
             return false;
         }
-
         div = div + 1;
-        squared = squared + sq_diff;
-        sq_diff = sq_diff + 2;
+        squared = div ** 2;
     }
+
     return true;
 }
