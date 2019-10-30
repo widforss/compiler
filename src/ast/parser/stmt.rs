@@ -1,4 +1,4 @@
-use super::{Expr, Span, Statement, Stmt, Type, ParseError, ErrorKind, IResult, util};
+use super::{util, ErrorKind, Expr, IResult, ParseError, Span, Statement, Stmt, Type};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
 };
@@ -27,6 +27,7 @@ fn parse_stmt(input: Span) -> IResult<Span, Vec<Stmt>> {
             parse_return,
             parse_print,
             parse_assign,
+            parse_fn,
         ))),
         character::multispace0,
     );
@@ -68,6 +69,29 @@ fn parse_block(input: Span) -> IResult<Span, Stmt> {
     ))
 }
 
+fn parse_fn(input: Span) -> IResult<Span, Stmt> {
+    let (input, _) = character::multispace0(input)?;
+    let mut span = input;
+
+    let parser = sequence::tuple((
+        Expr::parse,
+        sequence::preceded(
+            sequence::tuple((character::multispace0, bytes::tag(";"))),
+            bytes::tag(""),
+        ),
+    ));
+    let (input, (expr, end)) = parser(input)?;
+    span.fragment = &span.fragment[..(end.offset - span.offset)];
+
+    Ok((
+        input,
+        Stmt {
+            stmt: Statement::Let(false, "!fn", Type::Unit, expr),
+            span,
+        },
+    ))
+}
+
 fn parse_let(input: Span) -> IResult<Span, Stmt> {
     let (input, _) = character::multispace0(input)?;
     let mut span = input;
@@ -103,7 +127,7 @@ fn parse_let(input: Span) -> IResult<Span, Stmt> {
     Ok((
         input,
         Stmt {
-            stmt: Statement::Let(mutable, ident, typ, expr),
+            stmt: Statement::Let(mutable, ident.fragment, typ, expr),
             span,
         },
     ))
@@ -235,12 +259,16 @@ fn parse_print(input: Span) -> IResult<Span, Stmt> {
 
 fn parse_assign(input: Span) -> IResult<Span, Stmt> {
     let (input, _) = character::multispace0(input)?;
+    let mut span_ident = input;
     let mut span = input;
 
-    let ident_parser = sequence::terminated(
+    let ident_parser = sequence::tuple((
+        multi::many0(sequence::tuple((bytes::tag("*"), character::multispace0))),
         util::parse_ident_span,
-        sequence::tuple((character::multispace0, bytes::tag("="))),
-    );
+        bytes::tag(""),
+        character::multispace0,
+        bytes::tag("="),
+    ));
     let expr_parser = sequence::tuple((
         Expr::parse,
         sequence::preceded(
@@ -248,7 +276,11 @@ fn parse_assign(input: Span) -> IResult<Span, Stmt> {
             bytes::tag(""),
         ),
     ));
-    let (input, ident) = ident_parser(input)?;
+
+    let (input, (_, _, end, _, _)) = ident_parser(input)?;
+    span_ident.fragment = &span.fragment[..(end.offset - span.offset)];
+    let (_, ident) = Expr::parse(span_ident)?;
+
     let (input, (expr, end)) = util::short(expr_parser(input))?;
     span.fragment = &span.fragment[..(end.offset - span.offset)];
 
@@ -264,6 +296,20 @@ fn parse_assign(input: Span) -> IResult<Span, Stmt> {
 fn parse_type(input: Span) -> IResult<Span, Type> {
     let (input, _) = character::multispace0(input)?;
     let orig_input = input;
+
+    let parser_ref = sequence::tuple((
+        branch::alt((bytes::tag("&"), bytes::tag(""))),
+        sequence::preceded(
+            character::multispace0,
+            branch::alt((bytes::tag("mut"), bytes::tag(""))),
+        ),
+    ));
+    let (input, (pointer, mutable)) = parser_ref(input)?;
+    if pointer.fragment == "&" {
+        let mutable = mutable.fragment == "mut";
+        let (input, inner) = parse_type(input)?;
+        return Ok((input, Type::Ref(mutable, Box::new(inner))));
+    }
 
     let parser = branch::alt((util::parse_ident_span, bytes::tag("()")));
     let (input, type_str) = parser(input)?;

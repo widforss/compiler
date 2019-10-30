@@ -1,4 +1,4 @@
-use super::{Span, Error};
+use super::{Error, Span};
 use nom::Err;
 
 pub type IResult<'a, I, O, E = ParseError<'a>> = Result<(I, O), Err<E>>;
@@ -46,7 +46,7 @@ impl<'a> Error for ParseError<'a> {
             ParseFunction => "Failed to parse function",
             DoubleFunctionDecl => "Function was declared twice",
             Keyword => "Did not expect keyword",
-            NoMain => "main function not declared.", 
+            NoMain => "main function not declared.",
             MainReturns => "main returns non-unit type",
             Nom(_) => panic!(),
         };

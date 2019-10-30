@@ -1,4 +1,4 @@
-use super::{Span, Error};
+use super::{Error, Span};
 
 pub struct IntprtError<'a> {
     pub span: Option<Span<'a>>,

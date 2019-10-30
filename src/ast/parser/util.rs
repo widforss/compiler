@@ -1,4 +1,4 @@
-use super::{ParseError, ErrorKind, IResult, Span};
+use super::{ErrorKind, IResult, ParseError, Span};
 use nom::{branch, bytes::complete::tag, character::complete as character, multi, sequence, Err};
 
 const KEYWORDS: [&str; 12] = [

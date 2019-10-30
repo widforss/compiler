@@ -1,5 +1,7 @@
-use super::{BinOp, Expr, Literal, Span, UnOp, Value, ParseError, ErrorKind, IResult, util};
-use nom::{branch, bytes::complete::tag, character::complete as character, multi, sequence, Err};
+use super::{util, BinOp, ErrorKind, Expr, IResult, Literal, ParseError, Span, UnOp, Value};
+use nom::{
+    branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
+};
 use std::f64;
 
 impl<'a> Expr<'a> {
@@ -12,7 +14,7 @@ impl<'a> Expr<'a> {
     }
 }
 
-const UNARYS: [UnOpmap; 2] = [
+const UNARYS: [UnOpmap; 4] = [
     UnOpmap {
         keyword: "-",
         op: UnOp::Sub,
@@ -20,6 +22,14 @@ const UNARYS: [UnOpmap; 2] = [
     UnOpmap {
         keyword: "!",
         op: UnOp::Inv,
+    },
+    UnOpmap {
+        keyword: ".",
+        op: UnOp::AsFloat,
+    },
+    UnOpmap {
+        keyword: "*",
+        op: UnOp::Deref,
     },
 ];
 
@@ -134,7 +144,7 @@ enum Ass {
 }
 
 fn parse_expr_nobin(input: Span) -> IResult<Span, Expr> {
-    branch::alt((parse_expr_nobin_noun, parse_unary))(input)
+    branch::alt((parse_expr_nobin_noun, parse_ref, parse_unary))(input)
 }
 
 fn parse_expr_nobin_noun(input: Span) -> IResult<Span, Expr> {
@@ -150,8 +160,8 @@ fn parse_parens(input: Span) -> IResult<Span, Expr> {
     let (input, _) = character::multispace0(input)?;
     let orig_input = input;
 
-    let (_, _) = tag("(")(input)?;
-    let parser = sequence::delimited(tag("("), Expr::parse, tag(")"));
+    let (_, _) = bytes::tag("(")(input)?;
+    let parser = sequence::delimited(bytes::tag("("), Expr::parse, bytes::tag(")"));
     match parser(input) {
         Ok(res) => Ok(res),
         Err(Err::Failure(ParseError { error, .. })) => Err(Err::Failure(ParseError::new(
@@ -159,9 +169,11 @@ fn parse_parens(input: Span) -> IResult<Span, Expr> {
             Some(orig_input),
             error,
         ))),
-        Err(Err::Error(ParseError { error, .. })) => {
-            Err(Err::Error(ParseError::new(orig_input, Some(orig_input), error)))
-        }
+        Err(Err::Error(ParseError { error, .. })) => Err(Err::Error(ParseError::new(
+            orig_input,
+            Some(orig_input),
+            error,
+        ))),
         Err(_) => panic!(),
     }
 }
@@ -171,16 +183,16 @@ fn parse_call(input: Span) -> IResult<Span, Expr> {
     let mut span = input;
 
     let args_parser = multi::separated_list(
-        sequence::preceded(character::multispace0, tag(",")),
+        sequence::preceded(character::multispace0, bytes::tag(",")),
         Expr::parse,
     );
     let parser = sequence::tuple((
         parse_ident,
         sequence::preceded(
             character::multispace0,
-            sequence::delimited(tag("("), args_parser, tag(")")),
+            sequence::delimited(bytes::tag("("), args_parser, bytes::tag(")")),
         ),
-        tag(""),
+        bytes::tag(""),
     ));
     let (input, (ident, args, end)) = parser(input)?;
     span.fragment = &span.fragment[..(end.offset - span.offset)];
@@ -204,7 +216,7 @@ fn parse_ident(input: Span) -> IResult<Span, Expr> {
     Ok((
         input,
         Expr {
-            value: Value::Ident(ident),
+            value: Value::Ident(ident.fragment),
             span: ident,
         },
     ))
@@ -214,7 +226,7 @@ fn parse_unit(input: Span) -> IResult<Span, Expr> {
     let (input, _) = character::multispace0(input)?;
     let mut span = input;
 
-    let parser = sequence::preceded(tag("()"), tag(""));
+    let parser = sequence::preceded(bytes::tag("()"), bytes::tag(""));
     let (input, end) = parser(input)?;
     span.fragment = &span.fragment[..(end.offset - span.offset)];
     Ok((
@@ -231,12 +243,12 @@ fn parse_bool(input: Span) -> IResult<Span, Expr> {
     let mut span = input;
 
     let parser = sequence::tuple((
-        branch::alt((tag("!"), tag(""))),
+        branch::alt((bytes::tag("!"), bytes::tag(""))),
         sequence::preceded(
             character::multispace0,
-            branch::alt((tag("true"), tag("false"))),
+            branch::alt((bytes::tag("true"), bytes::tag("false"))),
         ),
-        tag(""),
+        bytes::tag(""),
     ));
     let (input, (inv, bool_str, end)) = parser(input)?;
     let bool = match (inv.fragment, bool_str.fragment) {
@@ -263,12 +275,12 @@ fn parse_number_special(input: Span) -> IResult<Span, Expr> {
     let mut span = input;
 
     let infty_parser = sequence::tuple((
-        branch::alt((tag::<&str, Span, ParseError>("-"), tag(""))),
+        branch::alt((bytes::tag::<&str, Span, ParseError>("-"), bytes::tag(""))),
         sequence::preceded(
             character::multispace0,
-            branch::alt((tag("INFINITY"), tag("NAN"))),
+            branch::alt((bytes::tag("INFINITY"), bytes::tag("NAN"))),
         ),
-        tag(""),
+        bytes::tag(""),
     ));
     if let Ok((input, (sign, val, end))) = infty_parser(input) {
         let special_value = match (sign.fragment, val.fragment) {
@@ -298,11 +310,11 @@ fn parse_number_normal(input: Span) -> IResult<Span, Expr> {
     let mut span = input;
 
     let numparser = sequence::tuple((
-        branch::alt((tag("-"), tag(""))),
+        branch::alt((bytes::tag("-"), bytes::tag(""))),
         sequence::preceded(character::multispace0, character::digit1),
-        branch::alt((tag("."), tag(""))),
+        branch::alt((bytes::tag("."), bytes::tag(""))),
         character::digit0,
-        tag(""),
+        bytes::tag(""),
     ));
     let (input, (sign, int, dot, _, end)) = numparser(input)?;
 
@@ -343,11 +355,36 @@ fn parse_number_normal(input: Span) -> IResult<Span, Expr> {
     }
 }
 
+fn parse_ref(input: Span) -> IResult<Span, Expr> {
+    let (input, _) = character::multispace0(input)?;
+    let mut span = input;
+
+    let parser = sequence::tuple((
+        sequence::preceded(
+            sequence::tuple((bytes::tag("&"), character::multispace0)),
+            branch::alt((bytes::tag("mut"), bytes::tag(""))),
+        ),
+        sequence::preceded(character::multispace0, parse_expr_nobin),
+        bytes::tag(""),
+    ));
+    let (input, (mutable, right, end)) = parser(input)?;
+    let mutable = mutable.fragment == "mut";
+    span.fragment = &span.fragment[..(end.offset - span.offset)];
+
+    Ok((
+        input,
+        Expr {
+            value: Value::UnOp(UnOp::Ref(mutable), Box::new(right)),
+            span,
+        },
+    ))
+}
+
 fn parse_unary(input: Span) -> IResult<Span, Expr> {
     let (input, _) = character::multispace0(input)?;
     let mut span = input;
 
-    let parser = sequence::tuple((tag_unary, parse_expr_nobin_noun, tag("")));
+    let parser = sequence::tuple((tag_unary, parse_expr_nobin_noun, bytes::tag("")));
     let (input, (op_map, right, end)) = parser(input)?;
     span.fragment = &span.fragment[..(end.offset - span.offset)];
 
@@ -364,8 +401,9 @@ fn parse_infix(input: Span) -> IResult<Span, Expr> {
     // Initialize with minimum precedence 1.
     match parse_infix_un(input, 1) {
         Ok(res) => Ok(res),
-        Err(Err::Error(ParseError { span, error, .. })) =>
-            Err(Err::Error(ParseError { input, span, error })),
+        Err(Err::Error(ParseError { span, error, .. })) => {
+            Err(Err::Error(ParseError { input, span, error }))
+        }
         Err(Err::Failure(ParseError { span, error, .. })) => {
             Err(Err::Failure(ParseError { input, span, error }))
         }
@@ -430,7 +468,7 @@ fn parse_infix_left<'a>(
 
 fn tag_unary<'a>(input: Span<'a>) -> IResult<'a, Span<'a>, &'a UnOpmap> {
     for op_map in UNARYS.iter() {
-        match tag(op_map.keyword)(input) {
+        match bytes::tag(op_map.keyword)(input) {
             Ok((input, _)) => return Ok((input, &op_map)),
             Err(Err::Error(_)) => (),
             Err(err) => return Err(err),
@@ -445,7 +483,7 @@ fn tag_unary<'a>(input: Span<'a>) -> IResult<'a, Span<'a>, &'a UnOpmap> {
 
 fn tag_infix<'a>(input: Span<'a>) -> IResult<'a, Span<'a>, &'a BinOpmap> {
     for op_map in INFIXS.iter() {
-        match tag(op_map.keyword)(input) {
+        match bytes::tag(op_map.keyword)(input) {
             Ok((input, _)) => return Ok((input, &op_map)),
             Err(Err::Error(_)) => (),
             Err(err) => return Err(err),

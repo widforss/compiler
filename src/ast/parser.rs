@@ -3,7 +3,10 @@ mod expr;
 mod stmt;
 mod util;
 
-use super::{Ast, Func, Mutability, Span, Stmt, Type, BinOp, Expr, Literal, UnOp, Value, Statement, error::Error};
+use super::{
+    error::Error, Ast, BinOp, Expr, Func, Literal, Mutability, Span, Statement, Stmt, Type, UnOp,
+    Value,
+};
 use error::{ErrorKind, IResult, ParseError};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
@@ -14,8 +17,14 @@ impl<'a> Ast<'a> {
     pub fn parse(input: &'a str) -> Result<Self, ParseError> {
         match parse_fn(Span::new(input)) {
             Ok((Span { fragment: "", .. }, tree)) => Ok(tree),
-            Ok((input, _)) => Err(ParseError::new(input, Some(input), ErrorKind::NotRecognised)),
-            Err(Err::Failure(ParseError { input, span, error })) => Err(ParseError::new(input, span, error)),
+            Ok((input, _)) => Err(ParseError::new(
+                input,
+                Some(input),
+                ErrorKind::NotRecognised,
+            )),
+            Err(Err::Failure(ParseError { input, span, error })) => {
+                Err(ParseError::new(input, span, error))
+            }
             _ => panic!(),
         }
     }
@@ -107,7 +116,7 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
     }
 }
 
-fn parse_params(input: Span) -> IResult<Span, Vec<(Type, Mutability, Span)>> {
+fn parse_params(input: Span) -> IResult<Span, Vec<(Type, Mutability, &str)>> {
     let (input, _) = character::multispace0(input)?;
 
     let parser = multi::separated_list(
@@ -127,7 +136,7 @@ fn parse_params(input: Span) -> IResult<Span, Vec<(Type, Mutability, Span)>> {
     let (input, params) = parser(input)?;
     let params = params
         .iter()
-        .map(|(mutable, span, typ)| (*typ, mutable.fragment == "mut ", *span))
+        .map(|(mutable, span, typ)| (typ.clone(), mutable.fragment == "mut ", span.fragment))
         .collect();
 
     Ok((input, params))

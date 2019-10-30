@@ -1,6 +1,7 @@
 use super::Type;
 
-pub struct TypeVariable {
-    pub typ: Type,
+#[derive(Copy, Clone)]
+pub struct TypeVariable<'a> {
+    pub typ: &'a Type,
     pub mutable: bool,
 }

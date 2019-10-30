@@ -1,0 +1,13 @@
+fn main() -> () {
+    let mut n: &mut i64 = &mut 2;
+    test(n);
+    print n;
+
+    return ();
+}
+
+fn test(x: &mut i64) -> () {
+    *x = *x + 5;
+
+    return (); 
+}

@@ -1,10 +1,10 @@
-use super::{op, State, IntprtError, Ast, Expr, Literal, Value};
+use super::{op, Ast, Expr, IntprtError, Literal, State, Value};
 
-pub fn intprt_expr<'a>(
+pub fn intprt_expr<'a, 'b>(
     expr: &'a Expr<'a>,
     ast: &'a Ast<'a>,
-    state: &mut State<Literal>,
-) -> Result<Literal, IntprtError<'a>> {
+    state: &'b mut State<Literal<'a>>,
+) -> Result<Literal<'a>, IntprtError<'a>> {
     use Value::*;
 
     match &expr.value {

@@ -1,4 +1,4 @@
-use super::{Ast, BinOp, Expr, Type, Span, UnOp, State, TypeError, ErrorKind, util, TypeVariable};
+use super::{util, Ast, BinOp, ErrorKind, Expr, Span, State, Type, TypeError, TypeVariable, UnOp};
 
 use Type::*;
 
@@ -33,6 +33,9 @@ pub fn check_unop<'a>(
     let literal = match call {
         Sub => un_sub(arg, ast, typestate),
         Inv => un_inv(arg, ast, typestate),
+        AsFloat => as_float(arg, ast, typestate),
+        Ref(mutable) => reference(mutable, arg, ast, typestate),
+        Deref => deref(arg, ast, typestate),
     };
     Ok(literal?)
 }
@@ -62,6 +65,40 @@ fn un_inv<'a>(
     }
 }
 
+fn as_float<'a>(
+    arg: &'a Expr<'a>,
+    ast: &'a Ast<'a>,
+    typestate: &mut State<TypeVariable>,
+) -> Result<Type, TypeError<'a>> {
+    let arg_type = util::check_expr(arg, ast, typestate)?;
+    match arg_type {
+        Int => Ok(Float),
+        _ => throw_type(arg.span),
+    }
+}
+
+fn reference<'a>(
+    mutable: bool,
+    arg: &'a Expr<'a>,
+    ast: &'a Ast<'a>,
+    typestate: &mut State<TypeVariable>,
+) -> Result<Type, TypeError<'a>> {
+    let arg_type = util::check_expr(arg, ast, typestate)?;
+    Ok(Ref(mutable, Box::new(arg_type)))
+}
+
+fn deref<'a>(
+    arg: &'a Expr<'a>,
+    ast: &'a Ast<'a>,
+    typestate: &mut State<TypeVariable>,
+) -> Result<Type, TypeError<'a>> {
+    let arg_type = util::check_expr(arg, ast, typestate)?;
+    match arg_type {
+        Ref(_, typ) => Ok(*typ),
+        _ => Err(TypeError::new(Some(arg.span), ErrorKind::DerefRef)),
+    }
+}
+
 fn pow_<'a>(
     left: &'a Expr<'a>,
     right: &'a Expr<'a>,
@@ -74,7 +111,6 @@ fn pow_<'a>(
     match (left_type, right_type) {
         (Int, Int) => Ok(Int),
         (Float, Float) => Ok(Float),
-        (Float, Int) => Ok(Float),
         _ => throw_type(span),
     }
 }
@@ -91,12 +127,6 @@ fn arith<'a>(
     match (left_type, right_type) {
         (Int, Int) => Ok(Int),
         (Float, Float) => Ok(Float),
-        (Int, Float) => Ok(Float),
-        (Float, Int) => Ok(Float),
-        (_, Int) => throw_type(left.span),
-        (Int, _) => throw_type(right.span),
-        (_, Float) => throw_type(left.span),
-        (Float, _) => throw_type(right.span),
         _ => throw_type(span),
     }
 }
@@ -113,10 +143,6 @@ fn cmp<'a>(
     match (left_type, right_type) {
         (Int, Int) => Ok(Bool),
         (Float, Float) => Ok(Bool),
-        (_, Int) => throw_type(left.span),
-        (Int, _) => throw_type(right.span),
-        (_, Float) => throw_type(left.span),
-        (Float, _) => throw_type(right.span),
         _ => throw_type(span),
     }
 }
@@ -134,12 +160,6 @@ fn eq<'a>(
         (Bool, Bool) => Ok(Bool),
         (Int, Int) => Ok(Bool),
         (Float, Float) => Ok(Bool),
-        (_, Bool) => throw_type(left.span),
-        (Bool, _) => throw_type(right.span),
-        (_, Int) => throw_type(left.span),
-        (Int, _) => throw_type(right.span),
-        (_, Float) => throw_type(left.span),
-        (Float, _) => throw_type(right.span),
         _ => throw_type(span),
     }
 }
@@ -155,8 +175,6 @@ fn logic<'a>(
     let right_type = util::check_expr(right, ast, typestate)?;
     match (left_type, right_type) {
         (Bool, Bool) => Ok(Bool),
-        (_, Bool) => throw_type(left.span),
-        (Bool, _) => throw_type(right.span),
         _ => throw_type(span),
     }
 }

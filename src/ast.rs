@@ -1,12 +1,12 @@
-pub mod interpreter;
-pub mod typechecker;
-mod parser;
 mod error;
+pub mod interpreter;
+mod parser;
 mod state;
+pub mod typechecker;
 
 pub use error::Error;
-use state::State;
 use nom_locate::LocatedSpan;
+use state::{Pointer, State};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -16,13 +16,11 @@ pub struct Ast<'a>(HashMap<&'a str, Func<'a>>);
 
 pub struct Func<'a> {
     typ: Type,
-    params: Vec<(Type, Mutability, Span<'a>)>,
+    params: Vec<(Type, Mutability, &'a str)>,
     body: Stmt<'a>,
     span: Span<'a>,
     order: u64,
 }
-
-pub type Mutability = bool;
 
 pub struct Stmt<'a> {
     pub stmt: Statement<'a>,
@@ -30,8 +28,8 @@ pub struct Stmt<'a> {
 }
 
 pub enum Statement<'a> {
-    Let(Mutability, Span<'a>, Type, Expr<'a>),
-    Assign(Span<'a>, Expr<'a>),
+    Let(Mutability, &'a str, Type, Expr<'a>),
+    Assign(Expr<'a>, Expr<'a>),
     While(Expr<'a>, Box<Stmt<'a>>),
     IfElse(Expr<'a>, Box<Stmt<'a>>, Box<Stmt<'a>>),
     Block(Vec<Stmt<'a>>),
@@ -39,12 +37,13 @@ pub enum Statement<'a> {
     Print(Expr<'a>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Type {
     Unit,
     Bool,
     Int,
     Float,
+    Ref(Mutability, Box<Type>),
 }
 
 pub struct Expr<'a> {
@@ -53,19 +52,20 @@ pub struct Expr<'a> {
 }
 
 pub enum Value<'a> {
-    Literal(Literal),
-    Ident(Span<'a>),
+    Literal(Literal<'a>),
+    Ident(&'a str),
     BinOp(BinOp, Box<Expr<'a>>, Box<Expr<'a>>),
     UnOp(UnOp, Box<Expr<'a>>),
-    Call(Span<'a>, Vec<Expr<'a>>),
+    Call(&'a str, Vec<Expr<'a>>),
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum Literal {
+pub enum Literal<'a> {
     Unit,
     Bool(bool),
     Int(i64),
     Float(f64),
+    Ref(Pointer<'a>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -91,7 +91,12 @@ pub enum BinOp {
 pub enum UnOp {
     Sub,
     Inv,
+    AsFloat,
+    Ref(Mutability),
+    Deref,
 }
+
+type Mutability = bool;
 
 impl<'a> fmt::Display for Ast<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -115,7 +120,7 @@ impl<'a> fmt::Display for Func<'a> {
                  Mutable: {},\n            \
                  Identifier: Ident({}),\n        \
                  }},\n",
-                paramstr, typ, mutability, ident.fragment,
+                paramstr, typ, mutability, ident,
             );
         }
         paramstr = format!("{}    ]", paramstr);
@@ -163,7 +168,7 @@ impl<'a> fmt::Display for Value<'a> {
     }
 }
 
-impl fmt::Display for Literal {
+impl<'a> fmt::Display for Literal<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -222,7 +227,7 @@ impl<'a> Statement<'a> {
                 instr,
                 mutable,
                 instr,
-                ident.fragment,
+                ident,
                 instr,
                 expr.value.print(indent + 1),
                 instr,
@@ -273,12 +278,12 @@ impl<'a> Statement<'a> {
             Return(expr) => format!("{}Return: {},\n", instr, expr.value.print(indent + 1)),
             Assign(ident, expr) => format!(
                 "{}Assign: {{\n\
-                 {}    Identifier: \"{}\",\n\
+                 {}    Identifier: {},\n\
                  {}    Expression: {},\n\
                  {}}},\n",
                 instr,
                 instr,
-                ident.fragment,
+                ident.value.print(indent + 1),
                 instr,
                 expr.value.print(indent + 1),
                 instr
@@ -317,13 +322,13 @@ impl<'a> Value<'a> {
                 instr
             ),
             Call(func, exprs) => {
-                let mut string = format!("Call({}) [\n", func.fragment);
+                let mut string = format!("Call({}) [\n", func);
                 for expr in exprs.iter() {
                     string = format!("{}{}    {},\n", string, instr, expr.value.print(indent + 1));
                 }
                 format!("{}{}],", string, instr)
             }
-            Ident(span) => format!("Ident(\"{}\")", span.fragment),
+            Ident(ident) => format!("Ident(\"{}\")", ident),
         }
     }
 }

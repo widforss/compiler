@@ -1,4 +1,4 @@
-use super::{Span, Error};
+use super::{Error, Span};
 
 pub struct TypeError<'a> {
     pub span: Option<Span<'a>>,
@@ -12,6 +12,8 @@ pub enum ErrorKind {
     ArgsNum,
     TypeError,
     NotMutable,
+    RefNotMutable,
+    DerefRef,
 }
 
 impl<'a> TypeError<'a> {
@@ -35,6 +37,8 @@ impl<'a> Error for TypeError<'a> {
             ArgsNum => "Number of arguments did not match parameters",
             TypeError => "Value had unexpected type",
             NotMutable => "Tried to modify immutable variable",
+            RefNotMutable => "Tried to modify immutable reference",
+            DerefRef => "Can only dereference references",
         };
         String::from(string)
     }

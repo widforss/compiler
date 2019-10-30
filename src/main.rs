@@ -1,6 +1,6 @@
 mod ast;
 
-use ast::{Ast, Expr, Span, Value, Error};
+use ast::{Ast, Error, Expr, Span, Value};
 use nom::character::complete as character;
 use std::env;
 use std::fs;
@@ -19,11 +19,11 @@ fn main() {
         Ok(ast) => {
             print!("{}", ast);
             ast
-        },
+        }
         Err(error) => {
             print_err(&input, error);
-            return
-        },
+            return;
+        }
     };
 
     match ast.typecheck() {
@@ -31,11 +31,11 @@ fn main() {
         Err(error) => {
             print_err(&input, error);
             return;
-        },
+        }
     };
 
     let main_call = Expr {
-        value: Value::Call(Span::new("main"), vec![]),
+        value: Value::Call("main", vec![]),
         span: Span::new("main()"),
     };
     match ast.run(&main_call) {
@@ -43,7 +43,7 @@ fn main() {
         Err(error) => {
             print_err(&input, error);
             return;
-        },
+        }
     };
 }
 
@@ -77,28 +77,34 @@ fn print_err<E: Error>(input: &String, error: E) {
 
 fn fmt_context(input: &String, span: Span) -> String {
     let mut offset = span.offset;
-    while let Some(char) = input.as_bytes().get(offset - 1 .. offset) {
-        if char[0] == b'\n' {
-            break;
+    if offset != 0 {
+        while let Some(char) = input.as_bytes().get(offset - 1..offset) {
+            if char[0] == b'\n' {
+                break;
+            }
+            offset -= 1;
         }
-        offset -= 1;
     }
 
     let mut end_offset = span.offset;
-    while let Some(char) = input.as_bytes().get(end_offset .. end_offset + 1) {
+    while let Some(char) = input.as_bytes().get(end_offset..end_offset + 1) {
         if char[0] == b'\n' {
             break;
         }
         end_offset += 1;
     }
 
-    let context = input.get(offset .. end_offset).unwrap();
+    let context = input.get(offset..end_offset).unwrap();
     let (context, spaces) =
-        character::multispace0::<&str, (&str, nom::error::ErrorKind)>(context).unwrap(); 
+        character::multispace0::<&str, (&str, nom::error::ErrorKind)>(context).unwrap();
+    let mut marker_length = span.fragment.len();
+    if marker_length > end_offset - span.offset {
+        marker_length = end_offset - span.offset;
+    }
     let marker = format!(
         "{}{}",
         " ".repeat(span.offset - (offset + spaces.len())),
-        "^".repeat(span.fragment.len()),
+        "^".repeat(marker_length),
     );
     format!("    {}\n    {}", context, marker)
 }
