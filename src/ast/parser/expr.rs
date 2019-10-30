@@ -384,7 +384,7 @@ fn parse_unary(input: Span) -> IResult<Span, Expr> {
     let (input, _) = character::multispace0(input)?;
     let mut span = input;
 
-    let parser = sequence::tuple((tag_unary, parse_expr_nobin_noun, bytes::tag("")));
+    let parser = sequence::tuple((tag_unary, parse_expr_nobin, bytes::tag("")));
     let (input, (op_map, right, end)) = parser(input)?;
     span.fragment = &span.fragment[..(end.offset - span.offset)];
 
