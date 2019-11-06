@@ -34,6 +34,14 @@ fn main() {
         }
     };
 
+    match ast.borrowcheck() {
+        Ok(_) => (),
+        Err(error) => {
+            print_err(&input, error);
+            return;
+        }
+    }
+
     let main_call = Expr {
         value: Value::Call("main", vec![]),
         span: Span::new("main()"),
@@ -79,7 +87,7 @@ fn fmt_context(input: &String, span: Span) -> String {
     let mut offset = span.offset;
     if offset != 0 {
         while let Some(char) = input.as_bytes().get(offset - 1..offset) {
-            if char[0] == b'\n' {
+            if char[0] == b'\n' || offset == 1 {
                 break;
             }
             offset -= 1;

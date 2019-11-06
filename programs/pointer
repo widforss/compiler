@@ -1,13 +1,18 @@
-fn main() -> () {
+fn main<>() -> () {
     let mut n: &mut i64 = &mut 2;
-    test(n);
+    let mut b: &mut i64 = test_a(n);
     print n;
 
     return ();
 }
 
-fn test(x: &mut i64) -> () {
-    *x = *x + 5;
+fn test_a<'c>(z: &'c mut i64) -> &'c mut i64 {
+    let p: &mut &mut i64 = test_b(&mut z, 5);
+    return *p;
+}
 
-    return (); 
+fn test_b<'a, 'b>(x: &'a mut &'b mut i64, y: i64) -> &'a mut &'b mut i64 {
+    **x = **x + 5;
+
+    return x;
 }

@@ -1,4 +1,6 @@
-use super::{op, Ast, ErrorKind, Expr, Literal, Span, State, Type, TypeError, TypeVariable, Value};
+use super::{
+    op, Ast, ErrorKind, Expr, Literal, Param, Span, State, Type, TypeError, TypeVariable, Value,
+};
 use std::mem;
 
 pub fn check_type<'a, 'b>(
@@ -67,7 +69,9 @@ fn check_call<'a>(
     let mut param_iter = func.params.iter();
     for arg in args.iter() {
         let typ = check_expr(arg, ast, typestate)?;
-        let (param_type, _, _) = param_iter.next().unwrap();
+        let Param {
+            typ: param_type, ..
+        } = param_iter.next().unwrap();
         check_type(&param_type, &typ, arg.span)?;
     }
 

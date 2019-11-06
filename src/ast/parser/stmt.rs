@@ -1,4 +1,4 @@
-use super::{util, ErrorKind, Expr, IResult, ParseError, Span, Statement, Stmt, Type};
+use super::{util, ErrorKind, Expr, IResult, Lifetimes, ParseError, Span, Statement, Stmt, Type};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
 };
@@ -12,6 +12,11 @@ impl<'a> Stmt<'a> {
 impl Type {
     pub fn parse(input: Span) -> IResult<Span, Type> {
         parse_type(input)
+    }
+    pub fn parse_life(input: Span) -> IResult<Span, (Type, Lifetimes)> {
+        let (input, (typ, mut lifetimes)) = parse_type_life(input)?;
+        lifetimes.reverse();
+        Ok((input, (typ, Lifetimes(lifetimes))))
     }
 }
 
@@ -108,7 +113,7 @@ fn parse_let(input: Span) -> IResult<Span, Stmt> {
         util::parse_ident_span,
         sequence::preceded(
             sequence::tuple((character::multispace0, bytes::tag(":"))),
-            parse_type,
+            Type::parse,
         ),
         sequence::preceded(
             sequence::tuple((character::multispace0, bytes::tag("="))),
@@ -297,20 +302,59 @@ fn parse_type(input: Span) -> IResult<Span, Type> {
     let (input, _) = character::multispace0(input)?;
     let orig_input = input;
 
-    let parser_ref = sequence::tuple((
-        branch::alt((bytes::tag("&"), bytes::tag(""))),
-        sequence::preceded(
-            character::multispace0,
-            branch::alt((bytes::tag("mut"), bytes::tag(""))),
-        ),
+    let parser_ref = branch::alt((
+        sequence::tuple((
+            bytes::tag("&"),
+            sequence::preceded(
+                character::multispace0,
+                branch::alt((bytes::tag("mut "), bytes::tag(""))),
+            ),
+        )),
+        sequence::tuple((bytes::tag(""), bytes::tag(""))),
     ));
     let (input, (pointer, mutable)) = parser_ref(input)?;
     if pointer.fragment == "&" {
-        let mutable = mutable.fragment == "mut";
+        let mutable = mutable.fragment == "mut ";
         let (input, inner) = parse_type(input)?;
         return Ok((input, Type::Ref(mutable, Box::new(inner))));
     }
 
+    parse_type_(input, orig_input)
+}
+
+fn parse_type_life(input: Span) -> IResult<Span, (Type, Vec<&str>)> {
+    let (input, _) = character::multispace0(input)?;
+    let orig_input = input;
+
+    let parser_ref = branch::alt((
+        sequence::tuple((
+            bytes::tag("&"),
+            sequence::preceded(character::multispace0, util::parse_lifetime),
+            sequence::preceded(
+                character::multispace0,
+                branch::alt((bytes::tag("mut "), bytes::tag(""))),
+            ),
+        )),
+        sequence::tuple((bytes::tag(""), bytes::tag(""), bytes::tag(""))),
+    ));
+    let (input, (pointer, lifetime, mutable)) = parser_ref(input)?;
+    if pointer.fragment == "&" {
+        let mutable = mutable.fragment == "mut ";
+        let (input, (inner, mut inner_life)) = parse_type_life(input)?;
+
+        let mut lifetimes = vec![lifetime.fragment];
+        lifetimes.append(&mut inner_life);
+
+        let typ = Type::Ref(mutable, Box::new(inner));
+
+        return Ok((input, (typ, lifetimes)));
+    }
+
+    let (input, typ) = parse_type_(input, orig_input)?;
+    Ok((input, (typ, vec![])))
+}
+
+fn parse_type_<'a>(input: Span<'a>, orig_input: Span<'a>) -> IResult<'a, Span<'a>, Type> {
     let parser = branch::alt((util::parse_ident_span, bytes::tag("()")));
     let (input, type_str) = parser(input)?;
     let typ = match type_str.fragment {

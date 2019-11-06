@@ -1,13 +1,15 @@
+mod borrowchecker;
 mod error;
-pub mod interpreter;
+mod interpreter;
 mod parser;
 mod state;
-pub mod typechecker;
+mod typechecker;
 
 pub use error::Error;
 use nom_locate::LocatedSpan;
 use state::{Pointer, State};
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 
 pub type Span<'a> = LocatedSpan<&'a str>;
@@ -16,11 +18,25 @@ pub struct Ast<'a>(HashMap<&'a str, Func<'a>>);
 
 pub struct Func<'a> {
     typ: Type,
-    params: Vec<(Type, Mutability, &'a str)>,
+    life: Lifetimes<'a>,
+    lifetimes: HashSet<&'a str>,
+    params: Vec<Param<'a>>,
     body: Stmt<'a>,
     span: Span<'a>,
+    return_span: Span<'a>,
     order: u64,
 }
+
+pub struct Param<'a> {
+    typ: Type,
+    mutable: Mutability,
+    lifetimes: Lifetimes<'a>,
+    ident: &'a str,
+    span: Span<'a>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Lifetimes<'a>(Vec<&'a str>);
 
 pub struct Stmt<'a> {
     pub stmt: Statement<'a>,
@@ -100,10 +116,7 @@ type Mutability = bool;
 
 impl<'a> fmt::Display for Ast<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Ast(functions) = self;
-        let mut functions = functions.iter().collect::<Vec<(&&str, &Func)>>();
-        functions.sort_by(|(_, a), (_, b)| a.order.cmp(&b.order));
-        for (name, function) in functions.iter() {
+        for (name, function) in self.sort_ast() {
             write!(f, "\"{}\": {}\n", name, function)?;
         }
         Ok(())
@@ -113,28 +126,59 @@ impl<'a> fmt::Display for Ast<'a> {
 impl<'a> fmt::Display for Func<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut paramstr = String::from("[\n");
-        for (typ, mutability, ident) in self.params.iter() {
+        for Param {
+            typ,
+            mutable,
+            ident,
+            lifetimes,
+            ..
+        } in self.params.iter()
+        {
             paramstr = format!(
                 "{}        {{\n            \
                  Type: {},\n            \
                  Mutable: {},\n            \
+                 Lifetimes: {},\n            \
                  Identifier: Ident({}),\n        \
                  }},\n",
-                paramstr, typ, mutability, ident,
+                paramstr, typ, mutable, lifetimes, ident,
             );
         }
         paramstr = format!("{}    ]", paramstr);
+        let mut lifetimes = self
+            .lifetimes
+            .iter()
+            .map(|string| *string)
+            .collect::<Vec<&str>>();
+        lifetimes.sort();
         write!(
             f,
             "{{\n    \
              Type: {},\n    \
+             Life: {},\n    \
+             Declared lifetimes: {},\n    \
              Parameters: {},\n    \
              Function: {},\n\
              }},",
             self.typ,
+            self.life,
+            Lifetimes(lifetimes),
             paramstr,
             self.body.stmt.block(1)
         )
+    }
+}
+
+impl<'a> fmt::Display for Lifetimes<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Lifetimes(lifetimes) = self;
+        let mut string = String::from("[");
+        let mut comma = "";
+        for life in lifetimes.iter() {
+            string = format!("{}{}{}", string, comma, life);
+            comma = ", ";
+        }
+        write!(f, "{}{}", string, "]")
     }
 }
 
@@ -183,6 +227,18 @@ impl fmt::Display for BinOp {
 impl fmt::Display for UnOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl<'a> Ast<'a> {
+    pub fn sort_ast(&self) -> Vec<(&str, &Func)> {
+        let Ast(functions) = self;
+        let mut functions: Vec<(&str, &Func)> = functions
+            .iter()
+            .map(|(string, func)| (*string, func))
+            .collect();
+        functions.sort_by(|(_, a), (_, b)| a.order.cmp(&b.order));
+        functions
     }
 }
 
@@ -330,5 +386,13 @@ impl<'a> Value<'a> {
             }
             Ident(ident) => format!("Ident(\"{}\")", ident),
         }
+    }
+}
+
+impl<'a> PartialEq<Lifetimes<'a>> for Lifetimes<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        let Lifetimes(self_lifetime) = self;
+        let Lifetimes(others_lifetime) = other;
+        self_lifetime == others_lifetime
     }
 }

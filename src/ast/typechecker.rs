@@ -4,16 +4,15 @@ mod state;
 mod util;
 
 use super::{
-    Ast, BinOp, Error, Expr, Func, Literal, Mutability, Span, State, Statement, Stmt, Type, UnOp,
-    Value,
+    Ast, BinOp, Error, Expr, Func, Literal, Mutability, Param, Span, State, Statement, Stmt, Type,
+    UnOp, Value,
 };
 use error::{ErrorKind, TypeError};
 use state::TypeVariable;
 
 impl<'a> Ast<'a> {
     pub fn typecheck(&'a self) -> Result<(), TypeError<'a>> {
-        let Ast(ast) = self;
-        for function in ast.values() {
+        for (_, function) in self.sort_ast() {
             check_fn(&function, self)?;
         }
         Ok(())
@@ -23,7 +22,13 @@ impl<'a> Ast<'a> {
 fn check_fn<'a>(function: &'a Func<'a>, ast: &'a Ast<'a>) -> Result<(), TypeError<'a>> {
     let typestate = &mut State::new();
     let mut param_iter = function.params.iter();
-    while let Some((typ, mutable, ident)) = param_iter.next() {
+    while let Some(Param {
+        typ,
+        mutable,
+        ident,
+        ..
+    }) = param_iter.next()
+    {
         let var_type = TypeVariable {
             typ: typ,
             mutable: *mutable,

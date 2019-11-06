@@ -2,7 +2,7 @@ mod error;
 mod op;
 mod util;
 
-use super::{Ast, BinOp, Error, Expr, Literal, Span, State, Statement, Stmt, UnOp, Value};
+use super::{Ast, BinOp, Error, Expr, Literal, Param, Span, State, Statement, Stmt, UnOp, Value};
 use error::{ErrorKind, IntprtError};
 
 const STACK_DEPTH: usize = 1000;
@@ -33,7 +33,7 @@ fn intprt_call<'a, 'b>(
     state.add();
     let mut param_iter = func.params.iter();
     for value in args.iter() {
-        let (_, _, ident) = *param_iter.next().unwrap();
+        let Param { ident, .. } = *param_iter.next().unwrap();
         state.insert(ident, *value);
     }
 

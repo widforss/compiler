@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+#[derive(Clone, Debug)]
 pub struct State<T>(Vec<LocalState<T>>);
 
+#[derive(Clone, Debug)]
 struct LocalState<T> {
     state: HashMap<String, Vec<(T, u64)>>,
     anonymous: Vec<(T, u64)>,

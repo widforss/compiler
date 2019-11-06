@@ -1,6 +1,6 @@
-fn main() -> () {
+fn main<>() -> () {
     let mut n: i64 = 2;
-    let max_int: i64 = (2 ** 62 - 1) * 2 + 1;
+    let max_int: i64 = 2 ** 7;
 
     while n < max_int {
         if is_prime(n) {
@@ -12,7 +12,7 @@ fn main() -> () {
     return ();
 }
 
-fn is_prime(n: i64) -> bool {
+fn is_prime<>(n: i64) -> bool {
     let mut div: i64 = 2;
     let mut squared: i64 = 4;
 

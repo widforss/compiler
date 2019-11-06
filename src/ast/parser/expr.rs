@@ -144,11 +144,14 @@ enum Ass {
 }
 
 fn parse_expr_nobin(input: Span) -> IResult<Span, Expr> {
-    branch::alt((parse_expr_nobin_noun, parse_ref, parse_unary))(input)
-}
-
-fn parse_expr_nobin_noun(input: Span) -> IResult<Span, Expr> {
-    branch::alt((parse_parens, parse_literal, parse_call, parse_ident))(input)
+    branch::alt((
+        parse_parens,
+        parse_literal,
+        parse_call,
+        parse_ident,
+        parse_ref,
+        parse_unary,
+    ))(input)
 }
 
 fn parse_literal(input: Span) -> IResult<Span, Expr> {
@@ -399,7 +402,7 @@ fn parse_unary(input: Span) -> IResult<Span, Expr> {
 
 fn parse_infix(input: Span) -> IResult<Span, Expr> {
     // Initialize with minimum precedence 1.
-    match parse_infix_un(input, 1) {
+    match parse_infix_(input, 1) {
         Ok(res) => Ok(res),
         Err(Err::Error(ParseError { span, error, .. })) => {
             Err(Err::Error(ParseError { input, span, error }))
@@ -410,16 +413,10 @@ fn parse_infix(input: Span) -> IResult<Span, Expr> {
         _ => panic!(),
     }
 }
-fn parse_infix_un<'a>(orig_input: Span, min_prec: u8) -> IResult<Span, Expr> {
+fn parse_infix_<'a>(orig_input: Span, min_prec: u8) -> IResult<Span, Expr> {
     // First, find left hand side expression. Search for everything but BinOps.
     let (orig_input, _) = character::multispace0(orig_input)?;
     let (input, left) = parse_expr_nobin(orig_input)?;
-    parse_infix_left(orig_input, input, min_prec, left)
-}
-fn parse_infix_noun<'a>(orig_input: Span, min_prec: u8) -> IResult<Span, Expr> {
-    // Almost identical to parse_infix_un(), but we do not accept unary ops.
-    let (orig_input, _) = character::multispace0(orig_input)?;
-    let (input, left) = parse_expr_nobin_noun(orig_input)?;
     parse_infix_left(orig_input, input, min_prec, left)
 }
 fn parse_infix_left<'a>(
@@ -448,12 +445,7 @@ fn parse_infix_left<'a>(
         Ass::Left => op_map.prec + 1,
         Ass::Right => op_map.prec,
     };
-    // Do not allow unary operators on rhs of arithmetic operations.
-    let right_parser = match op_map.keyword {
-        "**" | "*" | "/" | "//" | "%" | "+" | "-" => parse_infix_noun,
-        _ => parse_infix_un,
-    };
-    let (input, right) = right_parser(input, new_min_prec)?;
+    let (input, right) = parse_infix_(input, new_min_prec)?;
 
     let spanlen = right.span.offset - span.offset + right.span.fragment.len();
     span.fragment = &span.fragment[..spanlen];

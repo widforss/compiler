@@ -4,14 +4,15 @@ mod stmt;
 mod util;
 
 use super::{
-    error::Error, Ast, BinOp, Expr, Func, Literal, Mutability, Span, Statement, Stmt, Type, UnOp,
-    Value,
+    error::Error, Ast, BinOp, Expr, Func, Lifetimes, Literal, Param, Span, Statement, Stmt, Type,
+    UnOp, Value,
 };
 use error::{ErrorKind, IResult, ParseError};
 use nom::{
     branch, bytes::complete as bytes, character::complete as character, multi, sequence, Err,
 };
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 impl<'a> Ast<'a> {
     pub fn parse(input: &'a str) -> Result<Self, ParseError> {
@@ -42,12 +43,21 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
         ),
         sequence::preceded(
             character::multispace0,
+            sequence::delimited(bytes::tag("<"), parse_lifes, bytes::tag(">")),
+        ),
+        sequence::preceded(
+            character::multispace0,
             sequence::delimited(bytes::tag("("), parse_params, bytes::tag(")")),
         ),
         sequence::preceded(
-            sequence::tuple((character::multispace0, bytes::tag("->"))),
-            Type::parse,
+            sequence::tuple((
+                character::multispace0,
+                bytes::tag("->"),
+                character::multispace0,
+            )),
+            sequence::tuple((bytes::tag(""), Type::parse_life)),
         ),
+        bytes::tag(""),
         Stmt::parse,
         character::multispace0,
     )));
@@ -70,19 +80,39 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
     let mut funcmap = HashMap::new();
     functions.reverse();
     let mut order = 0;
-    while let Some((mut span, ident, params, typ, body, end)) = functions.pop() {
+    while let Some((
+        mut span,
+        ident,
+        lifetimes,
+        params,
+        (mut return_span, (typ, life)),
+        return_end,
+        body,
+        end,
+    )) = functions.pop()
+    {
         let begin = span.offset - orig_input.offset;
         let end = end.offset - orig_input.offset;
         span.fragment = &orig_input.fragment[begin..end];
+
+        let return_begin = return_span.offset - orig_input.offset;
+        let return_end = return_end.offset - orig_input.offset;
+        return_span.fragment = &orig_input.fragment[return_begin..return_end];
 
         if !funcmap.contains_key(ident.fragment) {
             funcmap.insert(
                 ident.fragment,
                 Func {
                     typ,
+                    life,
+                    lifetimes: lifetimes
+                        .iter()
+                        .map(|string| *string)
+                        .collect::<HashSet<&str>>(),
                     params,
                     body,
                     span,
+                    return_span,
                     order,
                 },
             );
@@ -116,12 +146,26 @@ fn parse_fn(input: Span) -> IResult<Span, Ast> {
     }
 }
 
-fn parse_params(input: Span) -> IResult<Span, Vec<(Type, Mutability, &str)>> {
+fn parse_lifes(input: Span) -> IResult<Span, Vec<&str>> {
     let (input, _) = character::multispace0(input)?;
 
     let parser = multi::separated_list(
         sequence::preceded(character::multispace0, bytes::tag(",")),
+        util::parse_lifetime,
+    );
+    let (input, lifes) = parser(input)?;
+    let lifes = lifes.iter().map(|span| span.fragment).collect();
+    Ok((input, lifes))
+}
+
+fn parse_params(input: Span) -> IResult<Span, Vec<Param>> {
+    let (input, _) = character::multispace0(input)?;
+    let orig_input = input;
+
+    let parser = multi::separated_list(
+        sequence::preceded(character::multispace0, bytes::tag(",")),
         sequence::tuple((
+            bytes::tag(""),
             sequence::preceded(
                 character::multispace0,
                 branch::alt((bytes::tag("mut "), bytes::tag(""))),
@@ -129,14 +173,26 @@ fn parse_params(input: Span) -> IResult<Span, Vec<(Type, Mutability, &str)>> {
             util::parse_ident_span,
             sequence::preceded(
                 sequence::tuple((character::multispace0, bytes::tag(":"))),
-                Type::parse,
+                Type::parse_life,
             ),
+            bytes::tag(""),
         )),
     );
     let (input, params) = parser(input)?;
     let params = params
         .iter()
-        .map(|(mutable, span, typ)| (typ.clone(), mutable.fragment == "mut ", span.fragment))
+        .map(|(mut span, mutable, ident, (typ, lifetimes), end)| {
+            let begin = span.offset - orig_input.offset;
+            let end = end.offset - orig_input.offset;
+            span.fragment = &orig_input.fragment[begin..end];
+            Param {
+                typ: typ.clone(),
+                mutable: mutable.fragment == "mut ",
+                lifetimes: lifetimes.clone(),
+                ident: ident.fragment,
+                span,
+            }
+        })
         .collect();
 
     Ok((input, params))
