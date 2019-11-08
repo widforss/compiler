@@ -94,8 +94,14 @@ fn borrow_call<'a>(
     let mut lifetimes = vec![];
     let Lifetimes(func_lifes) = &func.life;
     for func_life in func_lifes {
-        let translated = lifemap.get(func_life).unwrap();
-        lifetimes.push(*translated);
+        if let Some(translated) = lifemap.get(func_life) {
+            lifetimes.push(*translated);
+        } else {
+            return Err(BorrowError::new(
+                Some(func.return_span),
+                ErrorKind::UnmappedLifetime,
+            ))
+        }
     }
 
     *var_id += 1;

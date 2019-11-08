@@ -10,6 +10,7 @@ pub enum ErrorKind {
     LifetimeError,
     UndeclaredLifetime,
     SameReference,
+    UnmappedLifetime,
 }
 
 impl<'a> BorrowError<'a> {
@@ -31,6 +32,7 @@ impl<'a> Error for BorrowError<'a> {
             LifetimeError => "Lifetime is ambiguous",
             UndeclaredLifetime => "Undeclared lifetime",
             SameReference => "Reference root reuse",
+            UnmappedLifetime => "Return lifetime not in parameter lifetimes",
         };
         String::from(string)
     }

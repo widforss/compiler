@@ -1,0 +1,10 @@
+fn main<>() -> () {
+    let z: bool = true;
+    func(&&z, &z);
+
+    return ();
+}
+
+fn func<'a>(x: &'a &'a bool, y: &'a bool) -> () {
+    return ();
+}

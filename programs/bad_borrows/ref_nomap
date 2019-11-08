@@ -1,0 +1,8 @@
+fn main<>() -> () {
+    let x: &bool = func();
+    return ();
+}
+
+fn func<'a>() -> &'a bool {
+    return &true;
+}

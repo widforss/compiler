@@ -1,0 +1,10 @@
+fn main<>() -> () {
+    let z: &mut &bool = func(&mut &true);
+
+    return ();
+}
+
+fn func<'a>(x: &'a mut &'a bool) -> &'a mut &'a bool {
+    *x = &true;
+    return x;
+}

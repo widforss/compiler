@@ -1,0 +1,86 @@
+fn main<>() -> () {
+    let _1: bool = true;
+    let _1_: bool = _1;
+
+    let mut _2: bool = true;
+    _2 = false;
+
+    let _3_params: bool = true;
+    func(_3_params);
+
+    func_while();
+
+    if true {}
+    if true {} else {}
+
+    print true;
+
+    func_return();
+
+    let _9: bool = (true);
+
+    let _10: bool = true;
+    let _10_: bool = _10;
+
+    let _11_params: bool = true;
+    let _11: bool = func_call(_11_params);
+
+    let _12: bool = 1  <  2;
+    let _13: bool = 1. <  2.;
+    let _14: bool = 1  >  2;
+    let _15: bool = 1. >  2.;
+    let _16: bool = 1  <= 2;
+    let _17: bool = 1. <= 2.;
+    let _18: bool = 1  >= 2;
+    let _19: bool = 1. >= 2.;
+    let _20: bool = 1  == 2;
+    let _21: bool = 1. == 2.;
+    let _22: bool = true == false;
+    let _23: bool = 1  != 2;
+    let _24: bool = 1. != 2.;
+    let _25: bool = true != false;
+    let _26: bool = true && false;
+    let _27: bool = true || false;
+    let _28: i64  = 1  ** 2;
+    let _29: f64  = 1. ** 2.;
+    let _30: i64  = 1  *  2;
+    let _31: f64  = 1. *  2.;
+    let _32: i64  = 1  %  2;
+    let _33: f64  = 1. %  2.;
+    let _34: i64  = 1  // 2;
+    let _35: f64  = 1. // 2.;
+    let _36: i64  = 1  /  2;
+    let _37: f64  = 1. /  2.;
+    let _38: i64  = 1  +  2;
+    let _39: f64  = 1. +  2.;
+    let _40: i64  = 1  -  2;
+    let _41: f64  = 1. -  2.;
+    let _42: i64  = -1;
+    let _43: f64  = -1.;
+    let _44: bool = !true;
+    let _45: f64  = .1;
+    let _46: &i64 = &1;
+    let _47: &mut i64 = &mut 1;
+    let _48: i64 = *&1;
+    let _49: i64 = *&mut 1;
+
+    return ();
+}
+
+fn func<>(params: bool) -> () {
+    return ();
+}
+
+fn func_while<>() -> () {
+    while true {
+        return ();
+    }
+}
+
+fn func_return<>() -> () {
+    return ();
+}
+
+fn func_call<>(param: bool) -> bool {
+    return param;
+}

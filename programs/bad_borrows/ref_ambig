@@ -1,0 +1,13 @@
+fn main<>() -> () {
+    func_1(&true);
+    return ();
+}
+
+fn func_1<'a>(x: &'a bool) -> () {
+    func_2(x, &true);
+    return ();
+}
+
+fn func_2<'a>(x: &'a bool, y: &'a bool) -> () {
+    return ();
+}
